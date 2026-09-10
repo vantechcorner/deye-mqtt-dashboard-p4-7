@@ -1,5 +1,5 @@
 idf_component_register(
-    SRCS "ui.c" "ui_ha.c"
+    SRCS "ui.c" "ui_ha.c" "ui_sunsynk.c"
     INCLUDE_DIRS "include"
     REQUIRES
         lvgl

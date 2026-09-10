@@ -10,6 +10,7 @@
 #include "lvgl.h"
 #include "telemetry.h"
 #include "ui_ha.h"
+#include "ui_sunsynk.h"
 
 /* Soft dark palette — avoid high-contrast static blocks (TD2 image persistence). */
 #define COL_BG 0x12161C
@@ -45,6 +46,7 @@ typedef enum {
     UI_MODE_SIMPLE = 0,
     UI_MODE_FULL = 1,
     UI_MODE_HA = 2,
+    UI_MODE_SUNSYNK = 3,
 } ui_mode_t;
 
 typedef struct {
@@ -57,9 +59,11 @@ static ui_mode_t s_mode = UI_MODE_SIMPLE;
 static lv_obj_t *s_view_simple;
 static lv_obj_t *s_view_full;
 static lv_obj_t *s_view_ha;
+static lv_obj_t *s_view_sunsynk;
 static lv_obj_t *s_btn_simple;
 static lv_obj_t *s_btn_full;
 static lv_obj_t *s_btn_ha;
+static lv_obj_t *s_btn_sunsynk;
 static lv_obj_t *s_btn_setup;
 
 static lv_obj_t *s_wifi;
@@ -225,22 +229,23 @@ static void style_mode_btn(lv_obj_t *btn, bool active)
 static void apply_mode(ui_mode_t mode)
 {
     s_mode = mode;
+    lv_obj_add_flag(s_view_simple, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(s_view_full, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(s_view_ha, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(s_view_sunsynk, LV_OBJ_FLAG_HIDDEN);
     if (mode == UI_MODE_SIMPLE) {
         lv_obj_clear_flag(s_view_simple, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_add_flag(s_view_full, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_add_flag(s_view_ha, LV_OBJ_FLAG_HIDDEN);
     } else if (mode == UI_MODE_FULL) {
-        lv_obj_add_flag(s_view_simple, LV_OBJ_FLAG_HIDDEN);
         lv_obj_clear_flag(s_view_full, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_add_flag(s_view_ha, LV_OBJ_FLAG_HIDDEN);
-    } else {
-        lv_obj_add_flag(s_view_simple, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_add_flag(s_view_full, LV_OBJ_FLAG_HIDDEN);
+    } else if (mode == UI_MODE_HA) {
         lv_obj_clear_flag(s_view_ha, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_clear_flag(s_view_sunsynk, LV_OBJ_FLAG_HIDDEN);
     }
     style_mode_btn(s_btn_simple, mode == UI_MODE_SIMPLE);
     style_mode_btn(s_btn_full, mode == UI_MODE_FULL);
     style_mode_btn(s_btn_ha, mode == UI_MODE_HA);
+    style_mode_btn(s_btn_sunsynk, mode == UI_MODE_SUNSYNK);
 }
 
 static void on_mode_btn(lv_event_t *e)
@@ -277,11 +282,11 @@ static void on_clock_tap(lv_event_t *e)
     }
 }
 
-static lv_obj_t *make_mode_btn(lv_obj_t *parent, const char *text, ui_mode_t mode)
+static lv_obj_t *make_mode_btn(lv_obj_t *parent, const char *text, ui_mode_t mode, int32_t width)
 {
     lv_obj_t *btn = lv_button_create(parent);
-    lv_obj_set_size(btn, 86, 40);
-    lv_obj_set_style_min_width(btn, 86, 0);
+    lv_obj_set_size(btn, width, 40);
+    lv_obj_set_style_min_width(btn, width, 0);
     lv_obj_set_style_radius(btn, 10, 0);
     lv_obj_set_style_pad_all(btn, 0, 0);
     lv_obj_set_style_shadow_width(btn, 0, 0);
@@ -304,7 +309,7 @@ static lv_obj_t *build_status_bar(lv_obj_t *parent)
     lv_obj_set_style_pad_ver(bar, 6, 0);
     lv_obj_set_flex_flow(bar, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(bar, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_column(bar, 10, 0);
+    lv_obj_set_style_pad_column(bar, 8, 0);
     lv_obj_clear_flag(bar, LV_OBJ_FLAG_SCROLLABLE);
 
     /* Left status chips — content-sized so mode buttons are never squashed. */
@@ -314,7 +319,7 @@ static lv_obj_t *build_status_bar(lv_obj_t *parent)
     lv_obj_set_flex_grow(left, 0);
     lv_obj_set_flex_flow(left, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(left, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_column(left, 12, 0);
+    lv_obj_set_style_pad_column(left, 10, 0);
     lv_obj_clear_flag(left, LV_OBJ_FLAG_SCROLLABLE);
 
     s_wifi = make_label(left, &SB_FONT, COL_MUTED);
@@ -326,8 +331,7 @@ static lv_obj_t *build_status_bar(lv_obj_t *parent)
     s_grid_mode = make_label(left, &SB_FONT, COL_MUTED);
     set_sb_item(s_grid_mode, LV_SYMBOL_CHARGE, "--");
 
-    /* Center clock takes remaining width between chips and mode buttons.
-     * Tap the clock 5× within ~2.5s to re-enter SoftAP setup. */
+    /* Center clock — tap 5x within ~2.5s to re-enter SoftAP setup. */
     s_clock = make_label(bar, &SB_FONT, COL_TEXT);
     lv_obj_set_flex_grow(s_clock, 1);
     lv_obj_set_width(s_clock, 0);
@@ -337,22 +341,25 @@ static lv_obj_t *build_status_bar(lv_obj_t *parent)
     lv_obj_add_flag(s_clock, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(s_clock, on_clock_tap, LV_EVENT_CLICKED, NULL);
 
-    /* Fixed-width mode toggle — Simple / Full / HA + Setup. */
+    /* Modes + Setup always visible; shrink widths to fit Synk in 1280px. */
     lv_obj_t *toggle = lv_obj_create(bar);
     strip_chrome(toggle);
-    lv_obj_set_size(toggle, 340, LV_PCT(100));
+    lv_obj_set_size(toggle, 372, LV_PCT(100));
     lv_obj_set_flex_grow(toggle, 0);
     lv_obj_set_flex_flow(toggle, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(toggle, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_column(toggle, 6, 0);
+    lv_obj_set_style_pad_column(toggle, 4, 0);
     lv_obj_clear_flag(toggle, LV_OBJ_FLAG_SCROLLABLE);
 
-    s_btn_simple = make_mode_btn(toggle, "Simple", UI_MODE_SIMPLE);
-    s_btn_full = make_mode_btn(toggle, "Full", UI_MODE_FULL);
-    s_btn_ha = make_mode_btn(toggle, "HA", UI_MODE_HA);
+    s_btn_simple = make_mode_btn(toggle, "Simple", UI_MODE_SIMPLE, 68);
+    s_btn_full = make_mode_btn(toggle, "Full", UI_MODE_FULL, 54);
+    s_btn_ha = make_mode_btn(toggle, "HA", UI_MODE_HA, 46);
+    s_btn_sunsynk = make_mode_btn(toggle, "Synk", UI_MODE_SUNSYNK, 58);
 
+    /* Always-visible Setup (ASCII — gear glyph may be missing on Montserrat). */
     s_btn_setup = lv_button_create(toggle);
-    lv_obj_set_size(s_btn_setup, 48, 40);
+    lv_obj_set_size(s_btn_setup, 62, 40);
+    lv_obj_set_style_min_width(s_btn_setup, 62, 0);
     lv_obj_set_style_radius(s_btn_setup, 10, 0);
     lv_obj_set_style_pad_all(s_btn_setup, 0, 0);
     lv_obj_set_style_shadow_width(s_btn_setup, 0, 0);
@@ -360,8 +367,8 @@ static lv_obj_t *build_status_bar(lv_obj_t *parent)
     lv_obj_set_style_border_width(s_btn_setup, 1, 0);
     lv_obj_set_style_border_color(s_btn_setup, lv_color_hex(COL_BORDER), 0);
     lv_obj_t *setup_lbl = lv_label_create(s_btn_setup);
-    lv_label_set_text(setup_lbl, LV_SYMBOL_SETTINGS);
-    lv_obj_set_style_text_font(setup_lbl, &SB_FONT, 0);
+    lv_label_set_text(setup_lbl, "Setup");
+    lv_obj_set_style_text_font(setup_lbl, &TITLE_FONT, 0);
     lv_obj_set_style_text_color(setup_lbl, lv_color_hex(COL_MUTED), 0);
     lv_obj_center(setup_lbl);
     lv_obj_add_event_cb(s_btn_setup, on_setup_btn, LV_EVENT_CLICKED, NULL);
@@ -1107,6 +1114,7 @@ static void ui_refresh_cb(lv_timer_t *timer)
     update_dir_labels(&snap);
     update_pv_split(&snap);
     ui_ha_update(&snap);
+    ui_sunsynk_update(&snap);
 
     char buf[32];
     for (size_t i = 0; i < s_bound_n; i++) {
@@ -1173,6 +1181,12 @@ void ui_init(void)
     lv_obj_align(s_view_ha, LV_ALIGN_TOP_LEFT, 0, 0);
     strip_chrome(s_view_ha);
     ui_ha_build(s_view_ha);
+
+    s_view_sunsynk = lv_obj_create(content);
+    lv_obj_set_size(s_view_sunsynk, LV_PCT(100), LV_PCT(100));
+    lv_obj_align(s_view_sunsynk, LV_ALIGN_TOP_LEFT, 0, 0);
+    strip_chrome(s_view_sunsynk);
+    ui_sunsynk_build(s_view_sunsynk);
 
     apply_mode(UI_MODE_SIMPLE);
     lv_timer_create(ui_refresh_cb, 200, NULL);

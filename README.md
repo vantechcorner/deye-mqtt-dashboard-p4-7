@@ -1,11 +1,11 @@
-# Deye MQTT dashboard — ESP32-P4-Nano + RPi Touch Display 2
+﻿# Deye MQTT dashboard â€” ESP32-P4-Nano + RPi Touch Display 2
 
 Firmware **viewer** for Deye SG05/SG06 telemetry on:
 
 - [Waveshare ESP32-P4-Nano](https://docs.waveshare.com/ESP32-P4-NANO) (ESP32-P4 + ESP32-C6 Wi-Fi via ESP-Hosted, MIPI-DSI **2-lane**)
-- **RPi Touch Display 2** (TD2): 720×1280 ILI9881C, GT911 touch
+- **RPi Touch Display 2** (TD2): 720Ã—1280 ILI9881C, GT911 touch
 
-Sibling of `deye-mqtt-dashboard-lcd-35` (SPI ST7796 480×320). Same MQTT contract; different SoC / BSP / UI layout.
+Sibling of `deye-mqtt-dashboard-lcd-35` (SPI ST7796 480Ã—320). Same MQTT contract; different SoC / BSP / UI layout.
 
 ## SoftAP WiFi + MQTT provisioning
 
@@ -22,14 +22,16 @@ On first boot (no NVS WiFi SSID), or when you re-enter setup, the device starts 
 - MQTT host `192.168.3.249`, port `1883`
 - Topic `iriv/ivt`
 
-Flow: connect phone to the AP → open the portal → Save → device reboots into STA + MQTT.
+Flow: connect phone to the AP â†’ open the portal â†’ Save â†’ device reboots into STA + MQTT.
 
 **Re-enter setup** from the dashboard:
 
-- Gear (settings) button in the mode toggle, or
-- Tap the clock **5×** within ~2.5s
+- **Setup** button in the mode toggle (always visible), or
+- Tap the clock **5Ã—** within ~2.5s
 
-Both set a NVS flag and reboot into SoftAP mode.
+Both set a NVS flag (`force_setup`) and reboot into SoftAP mode.
+
+If the dashboard appears immediately after flash, NVS already has a WiFi SSID from prior testing — that is expected. Use **Setup** (or clock ×5) to force SoftAP again; erase NVS only if you want a clean first-boot experience.
 
 **Backup branch** (pre-provisioning dashboard): `backup/pre-wifi-provisioning`
 
@@ -40,6 +42,7 @@ Both set a NVS flag and reboot into SoftAP mode.
 | **Simple** | Compact home overview |
 | **Full** | Detailed PV / battery / grid / load |
 | **HA** | Home-Assistant-style tile layout |
+| **Synk** | Sunsynk-style power-flow diagram |
 
 ## MQTT contract
 
@@ -55,8 +58,8 @@ Both set a NVS flag and reboot into SoftAP mode.
 | SoftAP provisioning portal | Ready |
 | Telemetry store (ported from LCD-35) | Ready |
 | MQTT + Wi-Fi STA | Ready via ESP-Hosted (`esp_wifi_remote` + C6 SDIO) |
-| Display | **RPi Touch Display 2** 720×1280 ILI9881C |
-| LVGL 9 UI | Portrait dashboard (Simple / Full / HA), PSRAM double partial + DMA2D |
+| Display | **RPi Touch Display 2** 720Ã—1280 ILI9881C |
+| LVGL 9 UI | Portrait dashboard (Simple / Full / HA / Synk), PSRAM double partial + DMA2D |
 
 ## Flash prebuilt image (no build)
 
@@ -68,7 +71,7 @@ esptool.py --chip esp32p4 -p COMx -b 460800 write_flash 0x0 firmware/deye-mqtt-d
 
 See [`firmware/README.md`](firmware/README.md) for the exact filename, version, and notes.
 
-## Build from source (ESP-IDF ≥ 5.3, preferably 5.5.x with P4 support)
+## Build from source (ESP-IDF â‰¥ 5.3, preferably 5.5.x with P4 support)
 
 ```powershell
 $env:IDF_TOOLS_PATH = "D:\Espressif"
@@ -79,7 +82,7 @@ $exports = & $py "$env:IDF_PATH\tools\activate.py" --export
 . $exports
 cd D:\Github\deye-mqtt-dashboard-p4-7
 idf.py set-target esp32p4
-idf.py menuconfig   # Deye P4 dashboard → WiFi / MQTT defaults (leave WiFi empty)
+idf.py menuconfig   # Deye P4 dashboard â†’ WiFi / MQTT defaults (leave WiFi empty)
 idf.py build
 idf.py -p COMx flash monitor
 ```
@@ -96,7 +99,7 @@ idf.py merge-bin -o firmware/deye-mqtt-dashboard-p4-7-full.bin
 
 Optional color-bar firmware for TD2 wiring checks:
 
-→ [`examples/rpi_td2_colorbar/`](examples/rpi_td2_colorbar/)
+â†’ [`examples/rpi_td2_colorbar/`](examples/rpi_td2_colorbar/)
 
 **Wiring:** TD2 needs a 15-way DSI FFC **and** **5V on J1** (panel stays dark without J1 power).
 
@@ -105,10 +108,11 @@ Optional color-bar firmware for TD2 wiring checks:
 | Item | Note |
 |------|------|
 | MCU board | Waveshare ESP32-P4-Nano (P4 + C6 Wi-Fi) |
-| Panel | RPi Touch Display 2, 720×1280, 2-lane DSI |
+| Panel | RPi Touch Display 2, 720Ã—1280, 2-lane DSI |
 | Touch | GT911 on LCD FPC I2C |
 
 ## References
 
 - Waveshare: https://docs.waveshare.com/ESP32-P4-NANO  
 - ESP-IDF MIPI DSI: https://docs.espressif.com/projects/esp-idf/en/latest/esp32p4/api-reference/peripherals/lcd/dsi_lcd.html  
+
