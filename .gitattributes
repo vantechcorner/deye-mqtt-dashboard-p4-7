@@ -1,0 +1,3 @@
+# Treat firmware images as binary
+*.bin binary
+firmware/*.bin binary

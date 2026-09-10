@@ -55,7 +55,8 @@ CONFIG_LV_DEF_REFR_PERIOD=16
 
 CONFIG_MQTT_PROTOCOL_311=y
 
-# App defaults (WiFi SSID/password live in sdkconfig like lcd-35)
+# App defaults — WiFi comes from SoftAP/NVS (deye_cfg); leave SSID empty in production.
+# CONFIG_DEYE_WIFI_SSID and CONFIG_DEYE_WIFI_PASSWORD intentionally unset.
 CONFIG_DEYE_MQTT_HOST="192.168.3.249"
 CONFIG_DEYE_MQTT_PORT=1883
 CONFIG_DEYE_MQTT_BASE_TOPIC="iriv/ivt"

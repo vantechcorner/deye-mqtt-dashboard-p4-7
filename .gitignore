@@ -1,3 +1,4 @@
+# ESP-IDF local / generated
 build/
 sdkconfig
 sdkconfig.old
@@ -9,6 +10,17 @@ dependencies.lock
 __pycache__/
 .pio/
 dist/
-*.bin
+
+# Example subprojects
+examples/**/build/
+examples/**/sdkconfig
+examples/**/sdkconfig.old
+examples/**/managed_components/
+examples/**/dependencies.lock
+
+# Build artifacts (keep committed prebuilts under firmware/)
 *.elf
 *.map
+*.bin
+!firmware/
+!firmware/*.bin

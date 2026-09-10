@@ -3,6 +3,7 @@ idf_component_register(
         "app_main.c"
         "app_config.c"
         "wifi_sta.c"
+        "wifi_prov.c"
         "mqtt_sub.c"
         "ntp_sync.c"
     INCLUDE_DIRS
@@ -14,6 +15,7 @@ idf_component_register(
         esp_wifi
         esp_event
         esp_netif
+        esp_http_server
         esp_timer
         lwip
         bsp_p4_mipi7

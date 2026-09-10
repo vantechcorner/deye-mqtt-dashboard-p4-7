@@ -1,21 +1,23 @@
 menu "Deye P4 dashboard"
 
     config DEYE_WIFI_SSID
-        string "WiFi SSID (ESP32-C6 via ESP-Hosted)"
+        string "WiFi SSID example (compile-time only; SoftAP/NVS preferred)"
         default ""
         help
-            Station SSID for the on-board ESP32-C6 (ESP-Hosted).
-            Override via NVS key wifi_ssid.
+            Not used for STA unless also saved in NVS (deye_cfg).
+            Production devices get SSID via SoftAP portal at http://192.168.4.1.
 
     config DEYE_WIFI_PASSWORD
-        string "WiFi password"
+        string "WiFi password example (compile-time only)"
         default ""
+        help
+            Portal/NVS provisioning overrides this. Leave empty for production builds.
 
     config DEYE_MQTT_HOST
         string "MQTT broker hostname"
         default "192.168.3.249"
         help
-            Hostname only (no mqtt:// prefix). Override via NVS key mqtt_host.
+            Hostname only (no mqtt:// prefix). Prefill for SoftAP form; override via NVS.
 
     config DEYE_MQTT_PORT
         int "MQTT broker port"

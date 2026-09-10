@@ -6,6 +6,7 @@
 #include "esp_event.h"
 #include "esp_log.h"
 #include "esp_netif.h"
+#include "esp_system.h"
 #include "esp_wifi.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
@@ -14,8 +15,11 @@
 static const char *TAG = "wifi";
 static EventGroupHandle_t s_wifi_events;
 static bool s_connected;
+static int s_fail_count;
+static bool s_handlers_registered;
 
 #define WIFI_GOT_IP_BIT BIT0
+#define WIFI_STA_FAIL_LIMIT 20
 
 static void apply_link(void)
 {
@@ -30,12 +34,21 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
         s_connected = false;
         apply_link();
-        ESP_LOGW(TAG, "Disconnected, retrying");
+        s_fail_count++;
+        ESP_LOGW(TAG, "Disconnected, retry %d/%d", s_fail_count, WIFI_STA_FAIL_LIMIT);
+        if (s_fail_count >= WIFI_STA_FAIL_LIMIT) {
+            ESP_LOGE(TAG, "STA failed repeatedly — requesting SoftAP setup and rebooting");
+            app_config_request_setup();
+            vTaskDelay(pdMS_TO_TICKS(500));
+            esp_restart();
+            return;
+        }
         esp_wifi_connect();
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
         ESP_LOGI(TAG, "Got IP " IPSTR, IP2STR(&event->ip_info.ip));
         s_connected = true;
+        s_fail_count = 0;
         telemetry_set_link(true, false);
         if (s_wifi_events) {
             xEventGroupSetBits(s_wifi_events, WIFI_GOT_IP_BIT);
@@ -46,20 +59,24 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
 esp_err_t wifi_sta_start(void)
 {
     const app_config_t *cfg = app_config_get();
-    if (cfg->wifi_ssid[0] == '\0') {
-        ESP_LOGW(TAG, "WiFi SSID empty — set CONFIG_DEYE_WIFI_SSID or NVS wifi_ssid");
+    if (!app_config_wifi_ready()) {
+        ESP_LOGW(TAG, "WiFi not provisioned — SoftAP setup required");
         s_connected = false;
         telemetry_set_link(false, false);
         return ESP_ERR_INVALID_STATE;
     }
 
+    s_fail_count = 0;
     s_wifi_events = xEventGroupCreate();
     esp_netif_create_default_wifi_sta();
 
     wifi_init_config_t init_cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&init_cfg));
-    ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &event_handler, NULL, NULL));
-    ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &event_handler, NULL, NULL));
+    if (!s_handlers_registered) {
+        ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &event_handler, NULL, NULL));
+        ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &event_handler, NULL, NULL));
+        s_handlers_registered = true;
+    }
 
     wifi_config_t wifi_config = {0};
     strlcpy((char *)wifi_config.sta.ssid, cfg->wifi_ssid, sizeof(wifi_config.sta.ssid));

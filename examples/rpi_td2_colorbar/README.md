@@ -16,7 +16,7 @@ Bring-up test for **Raspberry Pi Touch Display 2 7″** on Waveshare **ESP32-P4-
 ```powershell
 cd D:\Github\deye-mqtt-dashboard-p4-7\examples\rpi_td2_colorbar
 idf.py set-target esp32p4
-idf.py -p COM36 flash monitor
+idf.py -p COMx flash monitor
 ```
 
 ## Pass / fail
@@ -27,9 +27,6 @@ idf.py -p COM36 flash monitor
 | `ili9881c: ID1: 0x98...` | Panel answering DSI after MCU power/reset |
 | Color bars / backlight glow | Bring-up success |
 | MCU OK but no glow | Check PWM / POWERON writes |
-| Hang before ID | MCU not powered (old bug — fixed by MCU sequence) |
+| Hang before ID | MCU not powered (check 5V on J1) |
 
-**2026-09-09:** After enabling MCU `POWERON` + backlight PWM, COM36 showed
-`ID1: 0x98, ID2: 0x81` and `Pattern: VERTICAL`.
-
-This is **unsupported** by Raspberry Pi on ESP32; treat as a lab experiment.
+This is **unsupported** by Raspberry Pi on ESP32; treat as a lab bring-up tool.

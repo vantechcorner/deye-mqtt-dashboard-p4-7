@@ -6,6 +6,7 @@
 #include <string.h>
 #include <time.h>
 
+#include "esp_timer.h"
 #include "lvgl.h"
 #include "telemetry.h"
 #include "ui_ha.h"
@@ -59,12 +60,19 @@ static lv_obj_t *s_view_ha;
 static lv_obj_t *s_btn_simple;
 static lv_obj_t *s_btn_full;
 static lv_obj_t *s_btn_ha;
+static lv_obj_t *s_btn_setup;
 
 static lv_obj_t *s_wifi;
 static lv_obj_t *s_mqtt;
 static lv_obj_t *s_status;
 static lv_obj_t *s_grid_mode;
 static lv_obj_t *s_clock;
+
+static lv_obj_t *s_prov_overlay;
+static bool s_provisioning;
+static void (*s_setup_request_cb)(void);
+static int s_clock_taps;
+static int64_t s_clock_tap_us;
 
 static lv_obj_t *s_simple_pv;
 static lv_obj_t *s_simple_soc_arc;
@@ -241,6 +249,34 @@ static void on_mode_btn(lv_event_t *e)
     apply_mode(mode);
 }
 
+static void request_setup_from_ui(void)
+{
+    if (s_setup_request_cb) {
+        s_setup_request_cb();
+    }
+}
+
+static void on_setup_btn(lv_event_t *e)
+{
+    (void)e;
+    request_setup_from_ui();
+}
+
+static void on_clock_tap(lv_event_t *e)
+{
+    (void)e;
+    int64_t now = esp_timer_get_time();
+    if (now - s_clock_tap_us > 2500000) {
+        s_clock_taps = 0;
+    }
+    s_clock_tap_us = now;
+    s_clock_taps++;
+    if (s_clock_taps >= 5) {
+        s_clock_taps = 0;
+        request_setup_from_ui();
+    }
+}
+
 static lv_obj_t *make_mode_btn(lv_obj_t *parent, const char *text, ui_mode_t mode)
 {
     lv_obj_t *btn = lv_button_create(parent);
@@ -290,18 +326,21 @@ static lv_obj_t *build_status_bar(lv_obj_t *parent)
     s_grid_mode = make_label(left, &SB_FONT, COL_MUTED);
     set_sb_item(s_grid_mode, LV_SYMBOL_CHARGE, "--");
 
-    /* Center clock takes remaining width between chips and mode buttons. */
+    /* Center clock takes remaining width between chips and mode buttons.
+     * Tap the clock 5× within ~2.5s to re-enter SoftAP setup. */
     s_clock = make_label(bar, &SB_FONT, COL_TEXT);
     lv_obj_set_flex_grow(s_clock, 1);
     lv_obj_set_width(s_clock, 0);
     lv_obj_set_style_text_align(s_clock, LV_TEXT_ALIGN_CENTER, 0);
     lv_label_set_long_mode(s_clock, LV_LABEL_LONG_CLIP);
     lv_label_set_text(s_clock, "--, --- --, ---- --:--:--");
+    lv_obj_add_flag(s_clock, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(s_clock, on_clock_tap, LV_EVENT_CLICKED, NULL);
 
-    /* Fixed-width mode toggle — Simple / Full / HA always fully visible. */
+    /* Fixed-width mode toggle — Simple / Full / HA + Setup. */
     lv_obj_t *toggle = lv_obj_create(bar);
     strip_chrome(toggle);
-    lv_obj_set_size(toggle, 280, LV_PCT(100));
+    lv_obj_set_size(toggle, 340, LV_PCT(100));
     lv_obj_set_flex_grow(toggle, 0);
     lv_obj_set_flex_flow(toggle, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(toggle, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
@@ -311,6 +350,21 @@ static lv_obj_t *build_status_bar(lv_obj_t *parent)
     s_btn_simple = make_mode_btn(toggle, "Simple", UI_MODE_SIMPLE);
     s_btn_full = make_mode_btn(toggle, "Full", UI_MODE_FULL);
     s_btn_ha = make_mode_btn(toggle, "HA", UI_MODE_HA);
+
+    s_btn_setup = lv_button_create(toggle);
+    lv_obj_set_size(s_btn_setup, 48, 40);
+    lv_obj_set_style_radius(s_btn_setup, 10, 0);
+    lv_obj_set_style_pad_all(s_btn_setup, 0, 0);
+    lv_obj_set_style_shadow_width(s_btn_setup, 0, 0);
+    lv_obj_set_style_bg_color(s_btn_setup, lv_color_hex(COL_BTN), 0);
+    lv_obj_set_style_border_width(s_btn_setup, 1, 0);
+    lv_obj_set_style_border_color(s_btn_setup, lv_color_hex(COL_BORDER), 0);
+    lv_obj_t *setup_lbl = lv_label_create(s_btn_setup);
+    lv_label_set_text(setup_lbl, LV_SYMBOL_SETTINGS);
+    lv_obj_set_style_text_font(setup_lbl, &SB_FONT, 0);
+    lv_obj_set_style_text_color(setup_lbl, lv_color_hex(COL_MUTED), 0);
+    lv_obj_center(setup_lbl);
+    lv_obj_add_event_cb(s_btn_setup, on_setup_btn, LV_EVENT_CLICKED, NULL);
     return bar;
 }
 
@@ -1016,8 +1070,10 @@ static void ui_refresh_cb(lv_timer_t *timer)
     telemetry_snapshot_t snap;
     telemetry_get_snapshot(&snap);
 
-    lv_label_set_text(s_wifi, snap.wifi_connected ? LV_SYMBOL_WIFI " OK" : LV_SYMBOL_WIFI " --");
-    lv_obj_set_style_text_color(s_wifi, lv_color_hex(snap.wifi_connected ? COL_POS : COL_MUTED), 0);
+    lv_label_set_text(s_wifi, snap.wifi_connected ? LV_SYMBOL_WIFI " OK"
+                      : (s_provisioning ? LV_SYMBOL_WIFI " AP" : LV_SYMBOL_WIFI " --"));
+    lv_obj_set_style_text_color(s_wifi, lv_color_hex(snap.wifi_connected ? COL_POS
+                                                     : (s_provisioning ? COL_ACCENT : COL_MUTED)), 0);
     lv_label_set_text(s_mqtt, snap.mqtt_connected ? LV_SYMBOL_ENVELOPE " OK" : LV_SYMBOL_ENVELOPE " --");
     lv_obj_set_style_text_color(s_mqtt, lv_color_hex(snap.mqtt_connected ? COL_POS : COL_DANGER), 0);
 
@@ -1120,4 +1176,66 @@ void ui_init(void)
 
     apply_mode(UI_MODE_SIMPLE);
     lv_timer_create(ui_refresh_cb, 200, NULL);
+}
+
+void ui_set_setup_request_cb(void (*cb)(void))
+{
+    s_setup_request_cb = cb;
+}
+
+bool ui_is_provisioning(void)
+{
+    return s_provisioning;
+}
+
+void ui_show_provisioning(const char *ap_ssid, const char *portal_url)
+{
+    s_provisioning = true;
+    lv_obj_t *scr = lv_screen_active();
+    if (s_prov_overlay) {
+        lv_obj_delete(s_prov_overlay);
+        s_prov_overlay = NULL;
+    }
+
+    s_prov_overlay = lv_obj_create(scr);
+    lv_obj_set_size(s_prov_overlay, LV_PCT(100), LV_PCT(100));
+    lv_obj_set_style_bg_color(s_prov_overlay, lv_color_hex(COL_BG), 0);
+    lv_obj_set_style_bg_opa(s_prov_overlay, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(s_prov_overlay, 0, 0);
+    lv_obj_set_style_radius(s_prov_overlay, 0, 0);
+    lv_obj_set_style_pad_all(s_prov_overlay, 28, 0);
+    lv_obj_set_flex_flow(s_prov_overlay, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(s_prov_overlay, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_row(s_prov_overlay, 14, 0);
+    lv_obj_clear_flag(s_prov_overlay, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_move_foreground(s_prov_overlay);
+
+    /* ASCII-only: Montserrat subset lacks Unicode hyphens/bullets (tofu boxes). */
+    lv_obj_t *title = make_label(s_prov_overlay, &HERO_FONT, COL_TEXT);
+    lv_label_set_text(title, "WiFi Setup");
+    lv_obj_set_style_text_align(title, LV_TEXT_ALIGN_CENTER, 0);
+
+    lv_obj_t *hint = make_label(s_prov_overlay, &TITLE_LG, COL_MUTED);
+    lv_label_set_text(hint, "Connect your phone to this AP,");
+    lv_obj_set_style_text_align(hint, LV_TEXT_ALIGN_CENTER, 0);
+
+    char line[96];
+    snprintf(line, sizeof(line), "then open %s", portal_url ? portal_url : "http://192.168.4.1");
+    lv_obj_t *url = make_label(s_prov_overlay, &VALUE_FONT, COL_ACCENT);
+    lv_label_set_text(url, line);
+    lv_obj_set_style_text_align(url, LV_TEXT_ALIGN_CENTER, 0);
+
+    snprintf(line, sizeof(line), "AP: %s", ap_ssid ? ap_ssid : "Deye-P4-Setup");
+    lv_obj_t *ap = make_label(s_prov_overlay, &VALUE_LG, COL_POS);
+    lv_label_set_text(ap, line);
+    lv_obj_set_style_text_align(ap, LV_TEXT_ALIGN_CENTER, 0);
+
+    lv_obj_t *fields = make_label(s_prov_overlay, &TITLE_FONT, COL_MUTED);
+    lv_label_set_text(fields, "Form: WiFi SSID/pass | MQTT host/port/user/pass | topic");
+    lv_obj_set_style_text_align(fields, LV_TEXT_ALIGN_CENTER, 0);
+
+    if (s_wifi) {
+        lv_label_set_text(s_wifi, LV_SYMBOL_WIFI " AP");
+        lv_obj_set_style_text_color(s_wifi, lv_color_hex(COL_ACCENT), 0);
+    }
 }
