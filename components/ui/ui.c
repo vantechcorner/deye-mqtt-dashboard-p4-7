@@ -34,6 +34,8 @@
 #define VALUE_FONT lv_font_montserrat_24
 #define VALUE_LG lv_font_montserrat_28
 #define HERO_FONT lv_font_montserrat_36
+/* Extra-large for Simple mode readability at a distance. */
+#define DISPLAY_FONT lv_font_montserrat_48
 #define GRID_ON_V_MIN 80.f
 #define GRID_ON_HZ_MIN 45.f
 #define GRID_ON_HZ_MAX 66.f
@@ -475,7 +477,7 @@ static void update_batt_power_segs(const telemetry_snapshot_t *snap)
 
 static lv_obj_t *make_hero_card(lv_obj_t *parent, const char *title)
 {
-    lv_obj_t *card = make_card(parent, title, &TITLE_LG);
+    lv_obj_t *card = make_card(parent, title, &VALUE_LG);
     lv_obj_set_width(card, LV_PCT(100));
     lv_obj_set_flex_grow(card, 1);
     lv_obj_set_flex_align(card, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
@@ -490,7 +492,7 @@ static void style_tabview(lv_obj_t *tv)
     lv_obj_set_style_bg_color(bar, lv_color_hex(COL_BAR), 0);
     lv_obj_set_style_pad_all(bar, 0, 0);
     lv_obj_set_style_border_width(bar, 0, 0);
-    lv_obj_set_style_text_font(bar, &TITLE_LG, 0);
+    lv_obj_set_style_text_font(bar, &VALUE_FONT, 0);
     lv_obj_set_style_bg_color(bar, lv_color_hex(COL_BAR), LV_PART_ITEMS);
     lv_obj_set_style_bg_color(bar, lv_color_hex(COL_CARD), LV_PART_ITEMS | LV_STATE_CHECKED);
     lv_obj_set_style_text_color(bar, lv_color_hex(COL_MUTED), LV_PART_ITEMS);
@@ -508,13 +510,13 @@ static void build_overview(lv_obj_t *tab)
     lv_obj_set_style_pad_column(tab, 16, 0);
     lv_obj_clear_flag(tab, LV_OBJ_FLAG_SCROLLABLE);
 
-    lv_obj_t *soc = make_card(tab, "Battery SOC", &TITLE_LG);
-    lv_obj_set_size(soc, 460, LV_PCT(100));
+    lv_obj_t *soc = make_card(tab, "Battery SOC", &VALUE_LG);
+    lv_obj_set_size(soc, 480, LV_PCT(100));
     lv_obj_set_flex_align(soc, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_all(soc, 14, 0);
-    lv_obj_set_style_pad_row(soc, 12, 0);
+    lv_obj_set_style_pad_all(soc, 12, 0);
+    lv_obj_set_style_pad_row(soc, 10, 0);
 
-    make_soc_arc(soc, 310, 20, &s_simple_soc_arc, &HERO_FONT);
+    make_soc_arc(soc, 340, 22, &s_simple_soc_arc, &DISPLAY_FONT);
     build_batt_power_segs(soc);
     add_metric(soc, METRIC_BATT_P, true, &HERO_FONT);
 
@@ -522,27 +524,27 @@ static void build_overview(lv_obj_t *tab)
     lv_obj_set_flex_grow(right, 1);
     lv_obj_set_height(right, LV_PCT(100));
     strip_chrome(right);
-    lv_obj_set_style_pad_row(right, 14, 0);
+    lv_obj_set_style_pad_row(right, 12, 0);
     lv_obj_set_flex_flow(right, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(right, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_clear_flag(right, LV_OBJ_FLAG_SCROLLABLE);
 
     lv_obj_t *pv = make_hero_card(right, "PV total");
-    lv_obj_set_style_pad_all(pv, 14, 0);
-    s_simple_pv = make_label(pv, &HERO_FONT, COL_PV);
+    lv_obj_set_style_pad_all(pv, 12, 0);
+    s_simple_pv = make_label(pv, &DISPLAY_FONT, COL_PV);
     lv_obj_set_width(s_simple_pv, LV_PCT(100));
     lv_obj_set_style_text_align(s_simple_pv, LV_TEXT_ALIGN_CENTER, 0);
 
     lv_obj_t *grid = make_hero_card(right, "Grid");
-    lv_obj_set_style_pad_all(grid, 14, 0);
-    lv_obj_t *grid_v = make_label(grid, &HERO_FONT, COL_TEXT);
+    lv_obj_set_style_pad_all(grid, 12, 0);
+    lv_obj_t *grid_v = make_label(grid, &DISPLAY_FONT, COL_TEXT);
     lv_obj_set_width(grid_v, LV_PCT(100));
     lv_obj_set_style_text_align(grid_v, LV_TEXT_ALIGN_CENTER, 0);
     bind(grid_v, METRIC_GRID_P_CT, true);
 
     lv_obj_t *load = make_hero_card(right, "Load");
-    lv_obj_set_style_pad_all(load, 14, 0);
-    lv_obj_t *load_v = make_label(load, &HERO_FONT, COL_ACCENT);
+    lv_obj_set_style_pad_all(load, 12, 0);
+    lv_obj_t *load_v = make_label(load, &DISPLAY_FONT, COL_ACCENT);
     lv_obj_set_width(load_v, LV_PCT(100));
     lv_obj_set_style_text_align(load_v, LV_TEXT_ALIGN_CENTER, 0);
     bind(load_v, METRIC_LOAD_P, true);
@@ -551,12 +553,12 @@ static void build_overview(lv_obj_t *tab)
 /* Detail-tab metric card that grows to fill available row/column space. */
 static lv_obj_t *make_detail_card(lv_obj_t *parent, const char *title)
 {
-    lv_obj_t *c = make_card(parent, title, &TITLE_LG);
+    lv_obj_t *c = make_card(parent, title, &VALUE_LG);
     lv_obj_set_flex_grow(c, 1);
     lv_obj_set_width(c, 0);
     lv_obj_set_height(c, LV_PCT(100));
-    lv_obj_set_style_pad_all(c, 14, 0);
-    lv_obj_set_style_pad_row(c, 10, 0);
+    lv_obj_set_style_pad_all(c, 12, 0);
+    lv_obj_set_style_pad_row(c, 8, 0);
     lv_obj_set_flex_align(c, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     return c;
 }
@@ -592,29 +594,29 @@ static void build_battery(lv_obj_t *tab)
     bool s1[] = {false, false, true};
     for (int i = 0; i < 3; i++) {
         lv_obj_t *c = make_detail_card(row1, t1[i]);
-        add_metric(c, i1[i], s1[i], &HERO_FONT);
+        add_metric(c, i1[i], s1[i], &DISPLAY_FONT);
     }
 
     lv_obj_t *row2 = make_detail_row(tab);
     lv_obj_t *soc = make_detail_card(row2, "SOC");
-    add_metric(soc, METRIC_BATT_SOC, false, &HERO_FONT);
+    add_metric(soc, METRIC_BATT_SOC, false, &DISPLAY_FONT);
     s_soc_bar_batt = lv_bar_create(soc);
-    style_soc_bar(s_soc_bar_batt, 18);
+    style_soc_bar(s_soc_bar_batt, 22);
 
     lv_obj_t *temp = make_detail_card(row2, "Temp");
-    add_metric(temp, METRIC_BATT_T, false, &HERO_FONT);
+    add_metric(temp, METRIC_BATT_T, false, &DISPLAY_FONT);
 
     lv_obj_t *today = make_detail_card(row2, "Charge / Disch.");
-    add_metric(today, METRIC_BATT_CHG_TODAY, false, &VALUE_LG);
-    add_metric(today, METRIC_BATT_DIS_TODAY, false, &VALUE_LG);
+    add_metric(today, METRIC_BATT_CHG_TODAY, false, &HERO_FONT);
+    add_metric(today, METRIC_BATT_DIS_TODAY, false, &HERO_FONT);
 }
 
 static void add_string_card(lv_obj_t *parent, const char *title, metric_id_t v, metric_id_t i, metric_id_t p)
 {
     lv_obj_t *c = make_detail_card(parent, title);
-    add_metric(c, v, false, &HERO_FONT);
-    add_metric(c, i, false, &HERO_FONT);
-    add_metric(c, p, true, &HERO_FONT);
+    add_metric(c, v, false, &DISPLAY_FONT);
+    add_metric(c, i, false, &DISPLAY_FONT);
+    add_metric(c, p, true, &DISPLAY_FONT);
 }
 
 static void build_pv(lv_obj_t *tab)
@@ -626,7 +628,7 @@ static void build_pv(lv_obj_t *tab)
     add_string_card(row, "PV2 V / A / W", METRIC_PV2_V, METRIC_PV2_I, METRIC_PV2_P);
 
     lv_obj_t *c = lv_obj_create(tab);
-    lv_obj_set_size(c, LV_PCT(100), 96);
+    lv_obj_set_size(c, LV_PCT(100), 110);
     lv_obj_set_style_bg_color(c, lv_color_hex(COL_CARD), 0);
     lv_obj_set_style_border_width(c, 1, 0);
     lv_obj_set_style_border_color(c, lv_color_hex(COL_BORDER), 0);
@@ -639,9 +641,9 @@ static void build_pv(lv_obj_t *tab)
     lv_obj_set_flex_align(c, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_clear_flag(c, LV_OBJ_FLAG_SCROLLABLE);
 
-    lv_obj_t *t = make_label(c, &TITLE_LG, COL_MUTED);
+    lv_obj_t *t = make_label(c, &VALUE_LG, COL_MUTED);
     lv_label_set_text(t, "PV energy today");
-    lv_obj_t *v = make_label(c, &HERO_FONT, COL_TEXT);
+    lv_obj_t *v = make_label(c, &DISPLAY_FONT, COL_TEXT);
     bind(v, METRIC_PV_ENERGY_TODAY, false);
 }
 
@@ -656,12 +658,12 @@ static void build_grid(lv_obj_t *tab)
     lv_obj_t *row1 = make_detail_row(tab);
     for (int i = 0; i < 3; i++) {
         lv_obj_t *c = make_detail_card(row1, titles[i]);
-        add_metric(c, ids[i], signed_w[i], &HERO_FONT);
+        add_metric(c, ids[i], signed_w[i], &DISPLAY_FONT);
     }
     lv_obj_t *row2 = make_detail_row(tab);
     for (int i = 3; i < 6; i++) {
         lv_obj_t *c = make_detail_card(row2, titles[i]);
-        add_metric(c, ids[i], signed_w[i], &HERO_FONT);
+        add_metric(c, ids[i], signed_w[i], &DISPLAY_FONT);
     }
 }
 
@@ -675,12 +677,12 @@ static void build_load(lv_obj_t *tab)
     lv_obj_t *row1 = make_detail_row(tab);
     for (int i = 0; i < 3; i++) {
         lv_obj_t *c = make_detail_card(row1, titles[i]);
-        add_metric(c, ids[i], signed_w[i], &HERO_FONT);
+        add_metric(c, ids[i], signed_w[i], &DISPLAY_FONT);
     }
     lv_obj_t *row2 = make_detail_row(tab);
     for (int i = 3; i < 5; i++) {
         lv_obj_t *c = make_detail_card(row2, titles[i]);
-        add_metric(c, ids[i], signed_w[i], &HERO_FONT);
+        add_metric(c, ids[i], signed_w[i], &DISPLAY_FONT);
     }
 }
 
@@ -694,7 +696,7 @@ static void build_simple(lv_obj_t *root)
     lv_obj_t *tv = lv_tabview_create(root);
     lv_obj_set_size(tv, LV_PCT(100), LV_PCT(100));
     lv_tabview_set_tab_bar_position(tv, LV_DIR_BOTTOM);
-    lv_tabview_set_tab_bar_size(tv, 56);
+    lv_tabview_set_tab_bar_size(tv, 64);
     style_tabview(tv);
 
     lv_obj_t *home = lv_tabview_add_tab(tv, "Home");
