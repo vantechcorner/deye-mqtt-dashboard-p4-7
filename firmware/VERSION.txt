@@ -1,11 +1,7 @@
-﻿version=0.1.0
+﻿version=0.1.1
 date=20260910
-idf=esp-idf-v5.5.4
-target=esp32p4
-full_bin=deye-mqtt-dashboard-p4-7-full-0.1.0-20260910.bin
-full_alias=deye-mqtt-dashboard-p4-7-full.bin
-app_bin=deye-mqtt-dashboard-p4-7-app.bin
-sha256_full=6ED31ACB2BA4FF0740F6180E95C7B53BDF0DFD7EC1D5407E77DEBE897061AEDC
-merge=bootloader+partition+app from 0x0
-wifi_defaults=empty (SoftAP provisioning)
-mqtt_defaults=192.168.3.249:1883 topic iriv/ivt
+git=abfa7c0
+full_bin=deye-mqtt-dashboard-p4-7-full.bin
+full_bytes=1709904
+sha256=E89DC4BDAFFEBEA0CF0A43DF2BC0A686EFC4B5F941451D45ED8D7B70A479C87C
+flash=esptool.py --chip esp32p4 -p COMx -b 460800 write_flash 0x0 firmware/deye-mqtt-dashboard-p4-7-full.bin
