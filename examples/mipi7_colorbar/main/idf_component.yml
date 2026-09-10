@@ -1,0 +1,4 @@
+## Standalone color-bar test — no LVGL / MQTT dependencies
+dependencies:
+  idf:
+    version: ">=5.3.0"

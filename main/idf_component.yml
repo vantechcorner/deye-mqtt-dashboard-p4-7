@@ -1,0 +1,17 @@
+## IDF Component Manager dependencies for ESP32-P4-Nano + TD2 MQTT dashboard
+dependencies:
+  idf:
+    version: ">=5.3.0"
+  lvgl/lvgl:
+    version: "^9.2.0"
+  espressif/esp_lcd_touch_gt911:
+    version: "^1.1.0"
+  espressif/esp_lcd_touch:
+    version: "^1.1.2"
+  espressif/esp_lcd_ili9881c:
+    version: "^1.0.1"
+  # Wi-Fi via ESP32-C6 (ESP-Hosted SDIO on P4-Nano)
+  espressif/esp_wifi_remote:
+    version: "*"
+  espressif/esp_hosted:
+    version: "*"

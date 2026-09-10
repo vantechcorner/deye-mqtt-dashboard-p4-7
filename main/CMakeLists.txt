@@ -1,0 +1,22 @@
+idf_component_register(
+    SRCS
+        "app_main.c"
+        "app_config.c"
+        "wifi_sta.c"
+        "mqtt_sub.c"
+        "ntp_sync.c"
+    INCLUDE_DIRS
+        "."
+    REQUIRES
+        nvs_flash
+        mqtt
+        json
+        esp_wifi
+        esp_event
+        esp_netif
+        esp_timer
+        lwip
+        bsp_p4_mipi7
+        telemetry
+        ui
+)
