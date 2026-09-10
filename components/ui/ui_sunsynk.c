@@ -33,10 +33,10 @@
 #define SK_ATTACH_GAP (SK_DOT / 2 + 4)
 /* Shared |X| offset from hub center for all four vertical risers (mirrored L/R). */
 #define SK_RISER_DX 48
-#define SK_INV_BOX_W 110
-#define SK_INV_BOX_H 52
+#define SK_INV_BOX_W 150
+#define SK_INV_BOX_H 68
 /* Inv metric box top = cy - SK_INV_BOX_TOP; hub stem must stop above it. */
-#define SK_INV_BOX_TOP 86
+#define SK_INV_BOX_TOP 96
 #define SK_INV_ICON_W 72
 #define SK_INV_ICON_H 72
 /* Gap between inv metric box bottom and icon top. */
@@ -51,8 +51,8 @@
 #define SK_HOME_BOX_H 56
 #define SK_BATT_BOX_W 140
 #define SK_BATT_BOX_H 88
-#define SK_GRID_BOX_W 210
-#define SK_GRID_BOX_H 88
+#define SK_GRID_BOX_W 270
+#define SK_GRID_BOX_H 104
 
 typedef enum {
     SK_EDGE_SOLAR = 0,
@@ -396,9 +396,9 @@ static void layout_sunsynk(lv_obj_t *host)
     int32_t home_y = 32;
     int32_t batt_x = 48;
     int32_t batt_y = h - 235;
-    int32_t grid_x = w - 300;
+    int32_t grid_x = w - 360;
     /* Align grid box mid-Y with battery box mid so bottom horizontals are parallel. */
-    int32_t grid_y = h - 211;
+    int32_t grid_y = h - 230;
 
     int32_t solar_box_x = solar_x + 36;
     int32_t solar_box_y = solar_y + 64;
@@ -407,7 +407,9 @@ static void layout_sunsynk(lv_obj_t *host)
     int32_t batt_box_x = batt_x + 4;
     int32_t batt_box_y = batt_y + 96;
     int32_t grid_box_x = grid_x + 8;
-    int32_t grid_box_y = grid_y + 72;
+    /* Shared bottom flow lane Y — keep Battery & Grid horizontals collinear. */
+    int32_t bottom_lane_y = batt_box_y + SK_BATT_BOX_H / 2;
+    int32_t grid_box_y = bottom_lane_y - SK_GRID_BOX_H / 2;
 
     /* --- Solar (top-left) --- */
     lv_obj_set_pos(s_solar.daily, solar_x, solar_y);
@@ -447,15 +449,20 @@ static void layout_sunsynk(lv_obj_t *host)
     /* --- Inverter hub --- */
     int32_t inv_box_x = cx - SK_INV_BOX_W / 2;
     int32_t inv_box_y = cy - SK_INV_BOX_TOP;
+    int32_t inv_icon_x = cx - SK_INV_ICON_W / 2;
     int32_t inv_icon_y = inv_box_y + SK_INV_BOX_H + SK_INV_ICON_GAP;
     lv_obj_set_pos(s_inv_box, inv_box_x, inv_box_y);
-    lv_obj_set_pos(s_inv_icon, cx - SK_INV_ICON_W / 2, inv_icon_y);
-    int32_t status_y = inv_icon_y + SK_INV_ICON_H + 8;
-    lv_obj_set_pos(s_inv_status_dot, cx - 6, status_y + 4);
-    lv_obj_set_pos(s_inv_status, cx + 12, status_y);
+    lv_obj_set_pos(s_inv_icon, inv_icon_x, inv_icon_y);
+    /* Status sits to the right of the inverter icon (vertically centered). */
+    int32_t status_y = inv_icon_y + (SK_INV_ICON_H - 22) / 2;
+    lv_obj_set_pos(s_inv_status_dot, inv_icon_x + SK_INV_ICON_W + 10, status_y + 6);
+    lv_obj_set_pos(s_inv_status, inv_icon_x + SK_INV_ICON_W + 26, status_y);
 
     /* Force layout so box positions are current before attach math. */
     lv_obj_update_layout(host);
+
+    /* Hub stem ends just below the inverter icon (status is now beside the icon). */
+    int32_t hub_bot_y = inv_icon_y + SK_INV_ICON_H + SK_ATTACH_GAP + 4;
 
     /* Flow geometry: mirrored L-paths — same |SK_RISER_DX| left/right, clear of hub. */
     lv_point_precise_t solar_outer =
@@ -465,11 +472,11 @@ static void layout_sunsynk(lv_obj_t *host)
     lv_point_precise_t solar_mid = {.x = solar_hub.x, .y = solar_outer.y};
     set_edge_points(&s_edges[SK_EDGE_SOLAR], SK_EDGE_SOLAR, solar_outer, solar_mid, solar_hub);
 
-    /* Battery: start past icon + SOC/state column so dots never enter those hitboxes. */
+    /* Battery: start past icon + SOC/state; horizontal on shared bottom_lane_y. */
     lv_point_precise_t batt_outer = {.x = (lv_value_precise_t)(batt_x + 320 + SK_ATTACH_GAP),
-                                     .y = (lv_value_precise_t)(batt_box_y + SK_BATT_BOX_H / 2)};
+                                     .y = (lv_value_precise_t)bottom_lane_y};
     lv_point_precise_t batt_hub = {.x = (lv_value_precise_t)(cx - SK_RISER_DX),
-                                   .y = (lv_value_precise_t)(cy + SK_HUB_CLEAR_BOT)};
+                                   .y = (lv_value_precise_t)hub_bot_y};
     lv_point_precise_t batt_mid = {.x = batt_hub.x, .y = batt_outer.y};
     set_edge_points(&s_edges[SK_EDGE_BATT], SK_EDGE_BATT, batt_outer, batt_mid, batt_hub);
 
@@ -480,10 +487,10 @@ static void layout_sunsynk(lv_obj_t *host)
     lv_point_precise_t home_mid = {.x = home_hub.x, .y = home_outer.y};
     set_edge_points(&s_edges[SK_EDGE_HOME], SK_EDGE_HOME, home_outer, home_mid, home_hub);
 
-    lv_point_precise_t grid_outer =
-        box_edge_attach(grid_box_x, grid_box_y, SK_GRID_BOX_W, SK_GRID_BOX_H, false);
+    lv_point_precise_t grid_outer = {.x = (lv_value_precise_t)(grid_box_x - SK_ATTACH_GAP),
+                                     .y = (lv_value_precise_t)bottom_lane_y};
     lv_point_precise_t grid_hub = {.x = (lv_value_precise_t)(cx + SK_RISER_DX),
-                                   .y = (lv_value_precise_t)(cy + SK_HUB_CLEAR_BOT)};
+                                   .y = (lv_value_precise_t)hub_bot_y};
     lv_point_precise_t grid_mid = {.x = grid_hub.x, .y = grid_outer.y};
     set_edge_points(&s_edges[SK_EDGE_GRID], SK_EDGE_GRID, grid_outer, grid_mid, grid_hub);
 
@@ -584,16 +591,17 @@ void ui_sunsynk_build(lv_obj_t *root)
     build_batt_icon(s_host);
 
     s_grid = make_corner(s_host, SK_GRID, LV_SYMBOL_GPS, "DAILY GRID BUY", SK_GRID_BOX_W, SK_GRID_BOX_H, false);
-    lv_obj_set_style_text_font(s_grid.live, &lv_font_montserrat_20, 0);
-    lv_obj_set_style_pad_hor(s_grid.box, 10, 0);
-    lv_obj_set_style_pad_ver(s_grid.box, 6, 0);
-    lv_label_set_text(s_grid.live, "--\n--");
+    lv_obj_set_style_text_font(s_grid.live, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_pad_hor(s_grid.box, 12, 0);
+    lv_obj_set_style_pad_ver(s_grid.box, 8, 0);
+    lv_label_set_text(s_grid.live, "--  --\n--  --");
     lv_label_set_text(s_grid.extra, "");
 
     /* Inverter hub */
     s_inv_box = make_live_box(s_host, SK_HUB, SK_INV_BOX_W, SK_INV_BOX_H);
-    s_inv_pwr = sk_label(s_inv_box, &lv_font_montserrat_16, SK_TEXT);
+    s_inv_pwr = sk_label(s_inv_box, &lv_font_montserrat_24, SK_TEXT);
     lv_obj_set_style_text_align(s_inv_pwr, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_pad_all(s_inv_box, 6, 0);
     lv_obj_center(s_inv_pwr);
     lv_label_set_text(s_inv_pwr, "--\n--");
 
@@ -608,13 +616,13 @@ void ui_sunsynk_build(lv_obj_t *root)
     lv_obj_center(inv_sym);
 
     s_inv_status_dot = lv_obj_create(s_host);
-    lv_obj_set_size(s_inv_status_dot, 10, 10);
+    lv_obj_set_size(s_inv_status_dot, 12, 12);
     lv_obj_set_style_radius(s_inv_status_dot, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_bg_color(s_inv_status_dot, lv_color_hex(SK_MUTED), 0);
     lv_obj_set_style_border_width(s_inv_status_dot, 0, 0);
     lv_obj_clear_flag(s_inv_status_dot, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
 
-    s_inv_status = sk_label(s_host, &lv_font_montserrat_14, SK_MUTED);
+    s_inv_status = sk_label(s_host, &lv_font_montserrat_20, SK_MUTED);
     lv_label_set_text(s_inv_status, "--");
 
     lv_obj_add_event_cb(s_host, on_host_size, LV_EVENT_SIZE_CHANGED, NULL);
@@ -780,20 +788,27 @@ void ui_sunsynk_update(const telemetry_snapshot_t *snap)
     /* Synk-local sticky Hz: keep last valid sample even after MQTT freshness expires. */
     bool ghz = snap->m[METRIC_GRID_HZ].valid;
     float grid_hz = snap->m[METRIC_GRID_HZ].value;
+    bool gi = telemetry_is_fresh(snap, METRIC_GRID_I);
+    float grid_i = gi ? snap->m[METRIC_GRID_I].value : 0.f;
     {
-        char wbuf[24] = "--";
-        char vbuf[40] = "";
+        /* Row1: power + Hz; Row2: voltage + CT current */
+        char r1_w[20] = "--";
+        char r1_hz[20] = "--";
+        char r2_v[20] = "--";
+        char r2_i[20] = "--";
         if (grid_ok) {
-            snprintf(wbuf, sizeof(wbuf), "%.0f W", absf(grid_w));
+            snprintf(r1_w, sizeof(r1_w), "%.0f W", absf(grid_w));
         }
-        if (gv && ghz) {
-            snprintf(vbuf, sizeof(vbuf), "\n%.1f V  %.2f Hz", snap->m[METRIC_GRID_V].value, grid_hz);
-        } else if (gv) {
-            snprintf(vbuf, sizeof(vbuf), "\n%.1f V", snap->m[METRIC_GRID_V].value);
-        } else if (ghz) {
-            snprintf(vbuf, sizeof(vbuf), "\n%.2f Hz", grid_hz);
+        if (ghz) {
+            snprintf(r1_hz, sizeof(r1_hz), "%.2f Hz", grid_hz);
         }
-        snprintf(buf, sizeof(buf), "%s%s", wbuf, vbuf);
+        if (gv) {
+            snprintf(r2_v, sizeof(r2_v), "%.1f V", snap->m[METRIC_GRID_V].value);
+        }
+        if (gi) {
+            snprintf(r2_i, sizeof(r2_i), "%+.2f A", grid_i);
+        }
+        snprintf(buf, sizeof(buf), "%s  %s\n%s  %s", r1_w, r1_hz, r2_v, r2_i);
         lv_label_set_text(s_grid.live, buf);
     }
     /* Non-essential omitted: no separate MQTT metric */
