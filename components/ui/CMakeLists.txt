@@ -6,4 +6,5 @@ idf_component_register(
         telemetry
         log
         esp_timer
+        nvs_flash
 )

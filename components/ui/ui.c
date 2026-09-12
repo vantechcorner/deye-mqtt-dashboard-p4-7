@@ -6,8 +6,10 @@
 #include <string.h>
 #include <time.h>
 
+#include "esp_log.h"
 #include "esp_timer.h"
 #include "lvgl.h"
+#include "nvs.h"
 #include "telemetry.h"
 #include "ui_ha.h"
 #include "ui_sunsynk.h"
@@ -57,7 +59,11 @@ typedef struct {
     bool signed_w;
 } bound_label_t;
 
-static ui_mode_t s_mode = UI_MODE_SIMPLE;
+static const char *TAG = "ui";
+static const char *UI_NVS_NS = "deye_cfg";
+static const char *UI_NVS_KEY_MODE = "ui_mode";
+
+static ui_mode_t s_mode = UI_MODE_HA;
 static lv_obj_t *s_view_simple;
 static lv_obj_t *s_view_full;
 static lv_obj_t *s_view_ha;
@@ -236,6 +242,44 @@ static void style_mode_btn(lv_obj_t *btn, bool active)
     }
 }
 
+static bool ui_mode_valid(uint8_t raw)
+{
+    return raw <= (uint8_t)UI_MODE_SUNSYNK;
+}
+
+/* No stored choice (first boot after flash) stays on HA. */
+static ui_mode_t ui_mode_load(void)
+{
+    nvs_handle_t nvs;
+    if (nvs_open(UI_NVS_NS, NVS_READONLY, &nvs) != ESP_OK) {
+        return UI_MODE_HA;
+    }
+    uint8_t stored = (uint8_t)UI_MODE_HA;
+    esp_err_t err = nvs_get_u8(nvs, UI_NVS_KEY_MODE, &stored);
+    nvs_close(nvs);
+    if (err != ESP_OK || !ui_mode_valid(stored)) {
+        return UI_MODE_HA;
+    }
+    return (ui_mode_t)stored;
+}
+
+static void ui_mode_save(ui_mode_t mode)
+{
+    nvs_handle_t nvs;
+    if (nvs_open(UI_NVS_NS, NVS_READWRITE, &nvs) != ESP_OK) {
+        ESP_LOGW(TAG, "NVS open failed; UI mode not saved");
+        return;
+    }
+    esp_err_t err = nvs_set_u8(nvs, UI_NVS_KEY_MODE, (uint8_t)mode);
+    if (err == ESP_OK) {
+        err = nvs_commit(nvs);
+    }
+    nvs_close(nvs);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "UI mode save failed: %s", esp_err_to_name(err));
+    }
+}
+
 static void apply_mode(ui_mode_t mode)
 {
     s_mode = mode;
@@ -262,6 +306,7 @@ static void on_mode_btn(lv_event_t *e)
 {
     ui_mode_t mode = (ui_mode_t)(uintptr_t)lv_event_get_user_data(e);
     apply_mode(mode);
+    ui_mode_save(mode);
 }
 
 static void request_setup_from_ui(void)
@@ -1198,7 +1243,7 @@ void ui_init(void)
     strip_chrome(s_view_sunsynk);
     ui_sunsynk_build(s_view_sunsynk);
 
-    apply_mode(UI_MODE_SIMPLE);
+    apply_mode(ui_mode_load());
     lv_timer_create(ui_refresh_cb, 200, NULL);
 }
 
