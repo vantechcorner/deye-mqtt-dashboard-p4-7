@@ -1,7 +1,7 @@
-﻿version=0.1.1
-date=20260910
-git=abfa7c0
+﻿version=0.1.2
+date=20260912
+git=feature/wifi-mqtt-provisioning
 full_bin=deye-mqtt-dashboard-p4-7-full.bin
-full_bytes=1709904
-sha256=E89DC4BDAFFEBEA0CF0A43DF2BC0A686EFC4B5F941451D45ED8D7B70A479C87C
+full_bytes=1711360
+sha256=06E7A2A42E47EA7AB3EFC37837B433626E38F98FE3630D9C5D886A85723B5E84
 flash=esptool.py --chip esp32p4 -p COMx -b 460800 write_flash 0x0 firmware/deye-mqtt-dashboard-p4-7-full.bin

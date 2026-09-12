@@ -36,10 +36,11 @@ Full topic = `iriv/ivt/` + `topicSuffix`.
 | Grid | `grid/buy_today` | `iriv/ivt/grid/buy_today` | kWh | |
 | Grid | `grid/sell_today` | `iriv/ivt/grid/sell_today` | kWh | |
 | Inverter | `inverter/temperature` | `iriv/ivt/inverter/temperature` | °C | |
-| Inverter | `inverter/power` | `iriv/ivt/inverter/power` | W | signed |
+| Inverter | `inverter/power` | `iriv/ivt/inverter/power` | W | signed AC converter (often negative); not house load |
 | Inverter | `inverter/frequency` | `iriv/ivt/inverter/frequency` | Hz | |
-| Load | `load/power` | `iriv/ivt/load/power` | W | signed |
-| Load | `load/energy_today` | `iriv/ivt/load/energy_today` | kWh | |
+| Load | `load/power` | `iriv/ivt/load/power` | W | LOAD port / backup only |
+| Load | `load/current` | `iriv/ivt/load/current` | A | LOAD port |
+| Load | `load/energy_today` | `iriv/ivt/load/energy_today` | kWh | inverter day-load register |
 
 ## Operating status map
 
@@ -56,6 +57,9 @@ Full topic = `iriv/ivt/` + `topicSuffix`.
 | Name | Formula |
 |------|---------|
 | PV total power | `pv1/power` + `pv2/power` |
+| House load | `load/power` + max(`grid/power_ct`, 0). Used on Simple/Full/HA Load and Synk DAILY LOAD. |
+| Synk inverter hub | `load/power` and `load/current` (LOAD port). Never `inverter/power`. |
+| Home energy today (Synk daily kWh) | `pv/energy_today` + `grid/buy_today` + `battery/discharge_today` − `grid/sell_today` − `battery/charge_today` |
 
 ## Stale / offline
 

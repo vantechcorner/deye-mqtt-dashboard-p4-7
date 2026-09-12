@@ -1173,6 +1173,19 @@ static void ui_refresh_cb(lv_timer_t *timer)
 
     char buf[32];
     for (size_t i = 0; i < s_bound_n; i++) {
+        if (s_bound[i].id == METRIC_LOAD_P) {
+            bool house_ok = false;
+            float house_w = telemetry_house_power_w(&snap, &house_ok);
+            if (house_ok) {
+                snprintf(buf, sizeof(buf), "%.0f W", house_w);
+                lv_obj_set_style_text_color(s_bound[i].label, lv_color_hex(COL_ACCENT), 0);
+            } else {
+                snprintf(buf, sizeof(buf), "%s", TELEMETRY_STALE_PLACEHOLDER);
+                lv_obj_set_style_text_color(s_bound[i].label, lv_color_hex(COL_MUTED), 0);
+            }
+            lv_label_set_text(s_bound[i].label, buf);
+            continue;
+        }
         if (s_bound[i].signed_w) {
             telemetry_format_signed_w(&snap, s_bound[i].id, buf, sizeof(buf));
             lv_obj_set_style_text_color(s_bound[i].label, lv_color_hex(signed_color(&snap, s_bound[i].id)), 0);

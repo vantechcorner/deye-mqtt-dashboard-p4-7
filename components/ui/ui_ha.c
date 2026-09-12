@@ -666,10 +666,10 @@ void ui_ha_update(const telemetry_snapshot_t *snap)
     }
     set_power_card(&s_pwr_pv, buf, signed_power_color(METRIC_PV1_P, pv_w, pf));
 
-    bool load_ok = telemetry_is_fresh(snap, METRIC_LOAD_P);
-    float load_w = load_ok ? snap->m[METRIC_LOAD_P].value : 0.f;
+    bool load_ok = false;
+    float load_w = telemetry_house_power_w(snap, &load_ok);
     if (load_ok) {
-        snprintf(buf, sizeof(buf), "%+.0f W", load_w);
+        snprintf(buf, sizeof(buf), "%.0f W", load_w);
     } else {
         snprintf(buf, sizeof(buf), "—");
     }

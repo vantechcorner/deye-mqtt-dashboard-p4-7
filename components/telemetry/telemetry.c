@@ -209,6 +209,31 @@ float telemetry_load_current(const telemetry_snapshot_t *snap, bool *fresh)
     return 0.f;
 }
 
+float telemetry_house_power_w(const telemetry_snapshot_t *snap, bool *fresh)
+{
+    /* IRIV load/power is Modbus 178 (backup/essential only). Inverter/power is
+     * Modbus 175 signed AC converter power and goes negative while charging from
+     * AC — that is not Solarman "consumption".
+     * House load ≈ essential + grid import (CT), matching Solarman Home. */
+    bool load_ok = telemetry_is_fresh(snap, METRIC_LOAD_P);
+    bool grid_ok = telemetry_is_fresh(snap, METRIC_GRID_P_CT);
+    *fresh = load_ok || grid_ok;
+    if (!*fresh) {
+        return 0.f;
+    }
+    float house = load_ok ? snap->m[METRIC_LOAD_P].value : 0.f;
+    if (grid_ok) {
+        float grid = snap->m[METRIC_GRID_P_CT].value;
+        if (grid > 0.f) {
+            house += grid;
+        }
+    }
+    if (house < 0.f) {
+        house = 0.f;
+    }
+    return house;
+}
+
 float telemetry_home_energy_today(const telemetry_snapshot_t *snap, bool *fresh)
 {
     /* Match Home Assistant energy distribution Home bubble:

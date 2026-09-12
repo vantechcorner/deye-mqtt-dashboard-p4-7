@@ -65,6 +65,8 @@ float telemetry_pv_voltage(const telemetry_snapshot_t *snap, bool *fresh);
 float telemetry_pv_current(const telemetry_snapshot_t *snap, bool *fresh);
 float telemetry_load_voltage(const telemetry_snapshot_t *snap, bool *fresh);
 float telemetry_load_current(const telemetry_snapshot_t *snap, bool *fresh);
+/* Solarman-style house load (W): backup load + grid import. Not inverter/power. */
+float telemetry_house_power_w(const telemetry_snapshot_t *snap, bool *fresh);
 /* HA energy-distribution Home: PV + buy + discharge − sell − charge (kWh). */
 float telemetry_home_energy_today(const telemetry_snapshot_t *snap, bool *fresh);
 const char *telemetry_status_text(const telemetry_snapshot_t *snap, bool *fresh);

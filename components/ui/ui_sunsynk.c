@@ -757,9 +757,9 @@ void ui_sunsynk_update(const telemetry_snapshot_t *snap)
     lv_label_set_text(s_home.daily, buf);
     lv_obj_set_style_text_color(s_home.daily, lv_color_hex(home_ok ? SK_HOME : SK_MUTED), 0);
 
-    bool load_ok = telemetry_is_fresh(snap, METRIC_LOAD_P);
-    float load_w = load_ok ? snap->m[METRIC_LOAD_P].value : 0.f;
-    fmt_w(buf, sizeof(buf), load_w, load_ok, false);
+    bool house_ok = false;
+    float house_w = telemetry_house_power_w(snap, &house_ok);
+    fmt_w(buf, sizeof(buf), house_w, house_ok, false);
     lv_label_set_text(s_home.live, buf);
 
     /* Battery */
@@ -906,20 +906,16 @@ void ui_sunsynk_update(const telemetry_snapshot_t *snap)
     }
     /* Non-essential omitted: no separate MQTT metric */
 
-    /* Inverter hub */
-    bool ip = telemetry_is_fresh(snap, METRIC_INV_P);
-    bool ii = false;
-    float inv_i = 0.f;
-    /* Prefer load current as inverter AC current proxy if INV current absent */
-    if (telemetry_is_fresh(snap, METRIC_LOAD_I)) {
-        ii = true;
-        inv_i = snap->m[METRIC_LOAD_I].value;
-    }
+    /* Inverter hub: LOAD port (Modbus 178), not house total and not signed inverter/power. */
+    bool load_ok = telemetry_is_fresh(snap, METRIC_LOAD_P);
+    float load_w = load_ok ? snap->m[METRIC_LOAD_P].value : 0.f;
+    bool ii = telemetry_is_fresh(snap, METRIC_LOAD_I);
+    float inv_i = ii ? snap->m[METRIC_LOAD_I].value : 0.f;
     {
         char wbuf[24] = "--";
         char ibuf[24] = "--";
-        if (ip) {
-            snprintf(wbuf, sizeof(wbuf), "%.0f W", snap->m[METRIC_INV_P].value);
+        if (load_ok) {
+            snprintf(wbuf, sizeof(wbuf), "%.0f W", absf(load_w));
         }
         if (ii) {
             snprintf(ibuf, sizeof(ibuf), "%.1f A", absf(inv_i));
@@ -947,10 +943,10 @@ void ui_sunsynk_update(const telemetry_snapshot_t *snap)
     s_edges[SK_EDGE_SOLAR].speed = flow_speed(pv_w);
     s_edges[SK_EDGE_SOLAR].color = SK_SOLAR;
 
-    float flow_load = absf(load_w);
-    s_edges[SK_EDGE_HOME].active = load_ok && flow_load >= SK_FLOW_THRESH_W;
+    float flow_home = absf(house_w);
+    s_edges[SK_EDGE_HOME].active = house_ok && flow_home >= SK_FLOW_THRESH_W;
     s_edges[SK_EDGE_HOME].toward_hub = false;
-    s_edges[SK_EDGE_HOME].speed = flow_speed(flow_load);
+    s_edges[SK_EDGE_HOME].speed = flow_speed(flow_home);
     s_edges[SK_EDGE_HOME].color = SK_LOAD;
 
     if (grid_ok && absf(grid_w) >= SK_FLOW_THRESH_W) {

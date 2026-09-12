@@ -50,6 +50,28 @@ If the dashboard appears immediately after flash, NVS already has a WiFi SSID fr
 - Payload: `{"value": <number>}`
 - Map: [mqtt-topics.md](mqtt-topics.md)
 
+## House load vs LOAD port
+
+IRIV publishes two different watt topics. They are **not** Solarman “consumption” by themselves.
+
+| Topic | Modbus | Meaning |
+|-------|--------|---------|
+| `inverter/power` | 175 | Signed AC **converter** power. Negative while the inverter draws from AC (e.g. charging). Do not show this as house load. |
+| `load/power` | 178 | **LOAD port** (backup / essential) only |
+| `grid/power_ct` | 172 | External CT. Positive = grid import |
+
+**House total load** (Simple / Full **Load**, HA **Load Power**, Synk **DAILY LOAD**):
+
+```
+house_w = load/power + max(grid/power_ct, 0)
+```
+
+Add CT import only. When exporting (`grid/power_ct` < 0), house load is just the LOAD port.
+
+**Synk inverter hub** (box above the inverter icon): LOAD port only — `load/power` and `load/current`. Not house total, not `inverter/power`.
+
+Daily **kWh** on the Synk home bubble is separate: PV + grid buy + battery discharge − grid sell − battery charge (same idea as Home Assistant energy distribution).
+
 ## Status
 
 | Piece | State |
