@@ -1,0 +1,34 @@
+---
+description: Publish to GitHub with git plus the GitHub REST API, never gh or GitHub Desktop
+alwaysApply: true
+---
+
+# GitHub publish: git + REST API
+
+When the user asks to push, publish, or update GitHub, use git and the GitHub REST API. Do not use `gh`, GitHub Desktop, or the web UI.
+
+## Publish
+
+1. Commit with git only when the user asked to commit or push.
+2. Push with `git push` (or `git push -u origin HEAD` if the branch has no upstream). Do not force-push `main` or `master`. Do not skip hooks.
+3. Confirm the commit is on the remote with the REST API. Report the commit `html_url`.
+
+## Confirm with the API
+
+- Base: `https://api.github.com`
+- Repo: `owner/name` from `git remote get-url origin`
+- Auth: `Authorization: Bearer <token>` from the existing git credential (`git credential fill` for `https://github.com`). Never print the token. Never write it into the repo, rules, or commits.
+- After push: `GET /repos/{owner}/{repo}/commits/{sha}`
+
+```powershell
+# password from `git credential fill` is the token; do not echo it
+$headers = @{
+  Authorization = "Bearer $token"
+  Accept = "application/vnd.github+json"
+  "X-GitHub-Api-Version" = "2022-11-28"
+  "User-Agent" = "deye-mqtt-dashboard"
+}
+Invoke-RestMethod -Headers $headers -Uri "https://api.github.com/repos/OWNER/REPO/commits/SHA"
+```
+
+`.cursor/` working files (plans, transcripts, debug logs) stay local. Only `.cursor/rules/` is shared.

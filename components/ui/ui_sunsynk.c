@@ -4,6 +4,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "esp_timer.h"
+
 /* Sunsynk power-flow palette (dark card look) */
 #define SK_BG 0x111111
 #define SK_PANEL 0x1A1A1A
@@ -53,6 +55,10 @@
 #define SK_BATT_BOX_H 88
 #define SK_GRID_BOX_W 270
 #define SK_GRID_BOX_H 104
+#define SK_SIDE_MARGIN 48
+#define SK_ICON_GAP 10
+#define SK_ICON_W 48
+#define SK_BATT_ST_HOLD_US (5LL * 1000000LL)
 
 typedef enum {
     SK_EDGE_SOLAR = 0,
@@ -97,6 +103,17 @@ static lv_obj_t *s_inv_status_dot;
 static lv_obj_t *s_inv_status;
 static lv_obj_t *s_batt_soc;
 static lv_obj_t *s_batt_state;
+
+typedef enum {
+    BATT_ST_NONE = 0,
+    BATT_ST_IDLE,
+    BATT_ST_CHG,
+    BATT_ST_DIS,
+} batt_st_t;
+
+static batt_st_t s_batt_st_shown = BATT_ST_NONE;
+static batt_st_t s_batt_st_pending = BATT_ST_NONE;
+static int64_t s_batt_st_pending_us;
 static lv_obj_t *s_batt_temp;
 static lv_obj_t *s_batt_shell;
 static lv_obj_t *s_batt_bars[SK_BATT_BARS];
@@ -330,7 +347,8 @@ static void build_batt_icon(lv_obj_t *host)
     lv_obj_set_style_pad_all(s_batt_shell, 4, 0);
     lv_obj_set_style_pad_row(s_batt_shell, 3, 0);
     lv_obj_set_flex_flow(s_batt_shell, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(s_batt_shell, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    /* First child is the top bar; green fills from the bottom (last child). */
+    lv_obj_set_flex_align(s_batt_shell, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_clear_flag(s_batt_shell, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
 
     /* Cap on top */
@@ -349,7 +367,6 @@ static void build_batt_icon(lv_obj_t *host)
         lv_obj_set_style_border_width(s_batt_bars[i], 0, 0);
         lv_obj_set_style_radius(s_batt_bars[i], 2, 0);
         lv_obj_clear_flag(s_batt_bars[i], LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
-        /* Keep creation order bottom-up visually via flex END */
     }
 
     s_batt_soc = sk_label(host, &lv_font_montserrat_28, SK_TEXT);
@@ -369,12 +386,55 @@ static void set_batt_bars(int soc)
     if (lit > SK_BATT_BARS) {
         lit = SK_BATT_BARS;
     }
-    /* Flex COLUMN + ALIGN_END: child 0 is top visually? Actually END packs to bottom,
-       so first created child is nearest the bottom. Light from bottom up. */
+    /* Child 0 is the top bar. Light the bottom bars first so empty bars drain from the top. */
     for (int i = 0; i < SK_BATT_BARS; i++) {
-        bool on = i < lit;
+        bool on = i >= (SK_BATT_BARS - lit);
         lv_obj_set_style_bg_color(s_batt_bars[i], lv_color_hex(on ? SK_BATT_BAR : SK_LINE_DIM), 0);
     }
+}
+
+static int32_t s_right_edge;
+
+static int32_t label_w(lv_obj_t *label)
+{
+    lv_obj_update_layout(label);
+    return lv_obj_get_width(label);
+}
+
+static void align_label_right(lv_obj_t *label, int32_t right, int32_t y)
+{
+    if (!label) {
+        return;
+    }
+    lv_obj_set_pos(label, right - label_w(label), y);
+}
+
+/* Daily values sit 10px from their icons. Icons match the daily value + caption stack. */
+static void pin_icon_right(lv_obj_t *icon, int32_t y)
+{
+    lv_obj_set_pos(icon, s_right_edge - label_w(icon), y);
+}
+
+static void snug_corner_icons(void)
+{
+    if (!s_solar.daily || !s_solar.icon || !s_home.icon || !s_grid.icon || s_right_edge <= 0) {
+        return;
+    }
+
+    lv_obj_set_pos(s_solar.icon, lv_obj_get_x(s_solar.daily) + label_w(s_solar.daily) + SK_ICON_GAP,
+                   lv_obj_get_y(s_solar.daily));
+
+    int32_t home_y = lv_obj_get_y(s_home.icon);
+    pin_icon_right(s_home.icon, home_y);
+    int32_t home_right = lv_obj_get_x(s_home.icon) - SK_ICON_GAP;
+    align_label_right(s_home.daily, home_right, home_y);
+    align_label_right(s_home.daily_lbl, home_right, home_y + 32);
+
+    int32_t grid_y = lv_obj_get_y(s_grid.icon);
+    pin_icon_right(s_grid.icon, grid_y);
+    int32_t grid_right = lv_obj_get_x(s_grid.icon) - SK_ICON_GAP;
+    align_label_right(s_grid.daily, grid_right, grid_y);
+    align_label_right(s_grid.daily_lbl, grid_right, grid_y + 32);
 }
 
 static void layout_sunsynk(lv_obj_t *host)
@@ -392,21 +452,21 @@ static void layout_sunsynk(lv_obj_t *host)
     /* Corner anchors — nudged inward so larger boxes clear the edges */
     int32_t solar_x = 56;
     int32_t solar_y = 32;
-    int32_t home_x = w - 250;
     int32_t home_y = 32;
-    int32_t batt_x = 48;
+    int32_t batt_x = SK_SIDE_MARGIN;
     int32_t batt_y = h - 235;
-    int32_t grid_x = w - 360;
-    /* Align grid box mid-Y with battery box mid so bottom horizontals are parallel. */
-    int32_t grid_y = h - 230;
 
-    int32_t solar_box_x = solar_x + 36;
+    int32_t right_edge = w - SK_SIDE_MARGIN;
+    s_right_edge = right_edge;
+    /* DAILY CHARGE is the left-column reference for PV and battery value boxes. */
+    int32_t left_col = batt_x;
+    int32_t solar_box_x = left_col;
     int32_t solar_box_y = solar_y + 64;
-    int32_t home_box_x = home_x + 16;
+    int32_t home_box_x = right_edge - SK_HOME_BOX_W;
     int32_t home_box_y = home_y + 64;
-    int32_t batt_box_x = batt_x + 4;
+    int32_t batt_box_x = left_col;
     int32_t batt_box_y = batt_y + 96;
-    int32_t grid_box_x = grid_x + 8;
+    int32_t grid_box_x = right_edge - SK_GRID_BOX_W;
     /* Shared bottom flow lane Y — keep Battery & Grid horizontals collinear. */
     int32_t bottom_lane_y = batt_box_y + SK_BATT_BOX_H / 2;
     int32_t grid_box_y = bottom_lane_y - SK_GRID_BOX_H / 2;
@@ -416,33 +476,38 @@ static void layout_sunsynk(lv_obj_t *host)
     lv_obj_set_pos(s_solar.daily_lbl, solar_x, solar_y + 32);
     lv_obj_set_pos(s_solar.icon, solar_x + 168, solar_y + 8);
     lv_obj_set_pos(s_solar.box, solar_box_x, solar_box_y);
-    lv_obj_set_pos(s_solar.extra, solar_box_x, solar_box_y + SK_SOLAR_BOX_H + 8);
+    lv_obj_set_pos(s_solar.extra, left_col, solar_box_y + SK_SOLAR_BOX_H + 8);
 
-    /* --- Home / Essential (top-right) --- */
-    lv_obj_set_pos(s_home.daily, home_x, home_y);
-    lv_obj_set_pos(s_home.daily_lbl, home_x, home_y + 32);
-    lv_obj_set_pos(s_home.icon, home_x + 148, home_y + 8);
+    /* --- Home (top-right): box and icon share right_edge --- */
+    lv_obj_set_pos(s_home.daily, home_box_x, home_y);
+    lv_obj_set_pos(s_home.daily_lbl, home_box_x, home_y + 32);
+    lv_obj_set_pos(s_home.icon, right_edge - SK_ICON_W, home_y);
     lv_obj_set_pos(s_home.box, home_box_x, home_box_y);
-    lv_obj_set_pos(s_home.tag, home_box_x + SK_HOME_BOX_W - 20, home_box_y + SK_HOME_BOX_H + 8);
 
     /* --- Battery (bottom-left) --- */
-    lv_obj_set_pos(s_batt.daily, batt_x, batt_y);
-    lv_obj_set_pos(s_batt.daily_lbl, batt_x, batt_y + 28);
-    lv_obj_set_pos(s_batt.extra, batt_x, batt_y + 56); /* discharge line reused */
+    lv_obj_set_pos(s_batt.daily, left_col, batt_y);
+    lv_obj_set_pos(s_batt.daily_lbl, left_col, batt_y + 28);
+    lv_obj_set_pos(s_batt.extra, left_col, batt_y + 56); /* discharge line reused */
     lv_obj_set_pos(s_batt.box, batt_box_x, batt_box_y);
-    lv_obj_set_pos(s_batt_temp, batt_x + 168, batt_y + 84);
-    lv_obj_set_pos(s_batt_shell, batt_x + 172, batt_y + 106);
+    int32_t batt_shell_x = batt_x + 172;
+    int32_t batt_shell_y = batt_y + 110;
+    int32_t batt_cap_y = batt_shell_y - 6;
+    lv_obj_set_pos(s_batt_shell, batt_shell_x, batt_shell_y);
+    /* 2px gap between temperature label and the battery cap. */
+    lv_obj_set_pos(s_batt_temp, batt_shell_x - 2, batt_cap_y - 20);
     lv_obj_t *cap = (lv_obj_t *)lv_obj_get_user_data(s_batt_shell);
     if (cap) {
-        lv_obj_set_pos(cap, batt_x + 183, batt_y + 101);
+        lv_obj_set_pos(cap, batt_shell_x + 11, batt_cap_y);
     }
     lv_obj_set_pos(s_batt_soc, batt_x + 230, batt_y + 124);
     lv_obj_set_pos(s_batt_state, batt_x + 230, batt_y + 164);
 
     /* --- Grid (bottom-right) --- */
-    lv_obj_set_pos(s_grid.daily, grid_x, grid_y);
-    lv_obj_set_pos(s_grid.daily_lbl, grid_x, grid_y + 32);
-    lv_obj_set_pos(s_grid.icon, grid_x + 168, grid_y + 8);
+    /* Caption-to-box gap matches Home: DAILY LOAD sits 32px above its rectangle. */
+    int32_t grid_head_y = grid_box_y - 64;
+    lv_obj_set_pos(s_grid.daily, grid_box_x, grid_head_y);
+    lv_obj_set_pos(s_grid.daily_lbl, grid_box_x, grid_head_y + 32);
+    lv_obj_set_pos(s_grid.icon, right_edge - SK_ICON_W, grid_head_y);
     lv_obj_set_pos(s_grid.box, grid_box_x, grid_box_y);
     lv_obj_set_pos(s_grid.extra, grid_box_x, grid_box_y + SK_GRID_BOX_H + 8);
 
@@ -511,6 +576,7 @@ static void layout_sunsynk(lv_obj_t *host)
     lv_obj_move_foreground(s_batt_state);
     lv_obj_move_foreground(s_batt_temp);
 
+    snug_corner_icons();
     s_layout_done = true;
 }
 
@@ -530,7 +596,7 @@ static sk_corner_t make_corner(lv_obj_t *host, uint32_t accent, const char *icon
     c.daily_lbl = sk_label(host, &lv_font_montserrat_16, accent);
     lv_label_set_text(c.daily_lbl, daily_lbl);
 
-    c.icon = sk_label(host, &lv_font_montserrat_28, accent);
+    c.icon = sk_label(host, &lv_font_montserrat_48, accent);
     lv_label_set_text(c.icon, icon);
 
     c.box = make_live_box(host, accent, box_w, box_h);
@@ -573,7 +639,7 @@ void ui_sunsynk_build(lv_obj_t *root)
 
     s_solar = make_corner(s_host, SK_SOLAR, LV_SYMBOL_CHARGE, "DAILY SOLAR", SK_SOLAR_BOX_W, SK_SOLAR_BOX_H,
                           false);
-    s_home = make_corner(s_host, SK_LOAD, LV_SYMBOL_HOME, "DAILY LOAD", SK_HOME_BOX_W, SK_HOME_BOX_H, true);
+    s_home = make_corner(s_host, SK_LOAD, LV_SYMBOL_HOME, "DAILY LOAD", SK_HOME_BOX_W, SK_HOME_BOX_H, false);
     lv_obj_set_style_text_color(s_home.daily, lv_color_hex(SK_HOME), 0);
     lv_obj_set_style_text_color(s_home.daily_lbl, lv_color_hex(SK_HOME), 0);
 
@@ -760,20 +826,47 @@ void ui_sunsynk_update(const telemetry_snapshot_t *snap)
     }
     lv_label_set_text(s_batt_temp, buf);
 
-    if (bp) {
-        if (batt_w < -40.f) {
-            lv_label_set_text(s_batt_state, "CHARGING");
-            lv_obj_set_style_text_color(s_batt_state, lv_color_hex(SK_OK), 0);
-        } else if (batt_w > 40.f) {
-            lv_label_set_text(s_batt_state, "DISCHARGING");
-            lv_obj_set_style_text_color(s_batt_state, lv_color_hex(SK_BATT), 0);
-        } else {
-            lv_label_set_text(s_batt_state, "IDLE");
-            lv_obj_set_style_text_color(s_batt_state, lv_color_hex(SK_MUTED), 0);
+    /* Hold last CHARGING/IDLE/DISCHARGING. A new state must stay stable 5s before it replaces the old one. */
+    if (snap->m[METRIC_BATT_P].valid) {
+        float pw = snap->m[METRIC_BATT_P].value;
+        batt_st_t cand = BATT_ST_IDLE;
+        if (pw < -40.f) {
+            cand = BATT_ST_CHG;
+        } else if (pw > 40.f) {
+            cand = BATT_ST_DIS;
         }
-    } else {
+        int64_t now = esp_timer_get_time();
+        if (s_batt_st_shown == BATT_ST_NONE) {
+            s_batt_st_shown = cand;
+            s_batt_st_pending = cand;
+            s_batt_st_pending_us = now;
+        } else if (cand == s_batt_st_shown) {
+            s_batt_st_pending = cand;
+            s_batt_st_pending_us = now;
+        } else if (s_batt_st_pending != cand) {
+            s_batt_st_pending = cand;
+            s_batt_st_pending_us = now;
+        } else if ((now - s_batt_st_pending_us) >= SK_BATT_ST_HOLD_US) {
+            s_batt_st_shown = cand;
+        }
+    }
+    switch (s_batt_st_shown) {
+    case BATT_ST_CHG:
+        lv_label_set_text(s_batt_state, "CHARGING");
+        lv_obj_set_style_text_color(s_batt_state, lv_color_hex(SK_OK), 0);
+        break;
+    case BATT_ST_DIS:
+        lv_label_set_text(s_batt_state, "DISCHARGING");
+        lv_obj_set_style_text_color(s_batt_state, lv_color_hex(SK_BATT), 0);
+        break;
+    case BATT_ST_IDLE:
+        lv_label_set_text(s_batt_state, "IDLE");
+        lv_obj_set_style_text_color(s_batt_state, lv_color_hex(SK_MUTED), 0);
+        break;
+    default:
         lv_label_set_text(s_batt_state, "BATTERY");
         lv_obj_set_style_text_color(s_batt_state, lv_color_hex(SK_MUTED), 0);
+        break;
     }
 
     /* Grid */
@@ -885,4 +978,5 @@ void ui_sunsynk_update(const telemetry_snapshot_t *snap)
             update_flow_edge(&s_edges[i]);
         }
     }
+    snug_corner_icons();
 }

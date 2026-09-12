@@ -24,3 +24,9 @@ examples/**/dependencies.lock
 *.bin
 !firmware/
 !firmware/*.bin
+
+# Cursor agent workflow (plans, transcripts, debug). Keep shared rules.
+.cursor/*
+!.cursor/rules/
+!.cursor/rules/**
+.specstory/
