@@ -28,7 +28,7 @@
 #define COL_BTN 0x21262D
 #define COL_BTN_ON 0x30363D
 
-#define SB_FONT lv_font_montserrat_16
+#define SB_FONT lv_font_montserrat_20
 #define TITLE_FONT lv_font_montserrat_16
 #define TITLE_LG lv_font_montserrat_20
 #define VALUE_FONT lv_font_montserrat_24
@@ -167,6 +167,14 @@ static void set_sb_item(lv_obj_t *label, const char *symbol, const char *text)
 {
     char buf[48];
     snprintf(buf, sizeof(buf), "%s %s", symbol, text);
+    lv_label_set_text(label, buf);
+}
+
+/* Icon, name, then value — extra spaces so the value is not glued to the name. */
+static void set_sb_named(lv_obj_t *label, const char *symbol, const char *name, const char *value)
+{
+    char buf[64];
+    snprintf(buf, sizeof(buf), "%s %s   %s", symbol, name, value);
     lv_label_set_text(label, buf);
 }
 
@@ -321,15 +329,15 @@ static lv_obj_t *build_status_bar(lv_obj_t *parent)
     lv_obj_set_flex_grow(left, 0);
     lv_obj_set_flex_flow(left, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(left, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_column(left, 10, 0);
+    lv_obj_set_style_pad_column(left, 22, 0);
     lv_obj_clear_flag(left, LV_OBJ_FLAG_SCROLLABLE);
 
     s_wifi = make_label(left, &SB_FONT, COL_MUTED);
-    set_sb_item(s_wifi, LV_SYMBOL_WIFI, "--");
+    set_sb_named(s_wifi, LV_SYMBOL_WIFI, "WiFi", "--");
     s_mqtt = make_label(left, &SB_FONT, COL_MUTED);
-    set_sb_item(s_mqtt, LV_SYMBOL_ENVELOPE, "--");
+    set_sb_named(s_mqtt, LV_SYMBOL_ENVELOPE, "MQTT", "--");
     s_status = make_label(left, &SB_FONT, COL_MUTED);
-    set_sb_item(s_status, LV_SYMBOL_POWER, "--");
+    set_sb_named(s_status, LV_SYMBOL_POWER, "Inverter", "--");
     s_grid_mode = make_label(left, &SB_FONT, COL_MUTED);
     set_sb_item(s_grid_mode, LV_SYMBOL_CHARGE, "--");
 
@@ -346,7 +354,7 @@ static lv_obj_t *build_status_bar(lv_obj_t *parent)
     /* Modes + Setup always visible; shrink widths to fit Synk in 1280px. */
     lv_obj_t *toggle = lv_obj_create(bar);
     strip_chrome(toggle);
-    lv_obj_set_size(toggle, 372, LV_PCT(100));
+    lv_obj_set_size(toggle, LV_SIZE_CONTENT, LV_PCT(100));
     lv_obj_set_flex_grow(toggle, 0);
     lv_obj_set_flex_flow(toggle, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(toggle, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
@@ -1079,16 +1087,16 @@ static void ui_refresh_cb(lv_timer_t *timer)
     telemetry_snapshot_t snap;
     telemetry_get_snapshot(&snap);
 
-    lv_label_set_text(s_wifi, snap.wifi_connected ? LV_SYMBOL_WIFI " OK"
-                      : (s_provisioning ? LV_SYMBOL_WIFI " AP" : LV_SYMBOL_WIFI " --"));
+    set_sb_named(s_wifi, LV_SYMBOL_WIFI, "WiFi",
+                 snap.wifi_connected ? "OK" : (s_provisioning ? "AP" : "--"));
     lv_obj_set_style_text_color(s_wifi, lv_color_hex(snap.wifi_connected ? COL_POS
                                                      : (s_provisioning ? COL_ACCENT : COL_MUTED)), 0);
-    lv_label_set_text(s_mqtt, snap.mqtt_connected ? LV_SYMBOL_ENVELOPE " OK" : LV_SYMBOL_ENVELOPE " --");
+    set_sb_named(s_mqtt, LV_SYMBOL_ENVELOPE, "MQTT", snap.mqtt_connected ? "OK" : "--");
     lv_obj_set_style_text_color(s_mqtt, lv_color_hex(snap.mqtt_connected ? COL_POS : COL_DANGER), 0);
 
     bool st_fresh = false;
     const char *st = telemetry_status_text(&snap, &st_fresh);
-    set_sb_item(s_status, status_symbol(&snap), st);
+    set_sb_named(s_status, status_symbol(&snap), "Inverter", st);
     lv_obj_set_style_text_color(s_status, lv_color_hex(telemetry_status_color(&snap)), 0);
 
     const char *grid_txt = "--";
@@ -1251,7 +1259,7 @@ void ui_show_provisioning(const char *ap_ssid, const char *portal_url)
     lv_obj_set_style_text_align(fields, LV_TEXT_ALIGN_CENTER, 0);
 
     if (s_wifi) {
-        lv_label_set_text(s_wifi, LV_SYMBOL_WIFI " AP");
+        set_sb_named(s_wifi, LV_SYMBOL_WIFI, "WiFi", "AP");
         lv_obj_set_style_text_color(s_wifi, lv_color_hex(COL_ACCENT), 0);
     }
 }
