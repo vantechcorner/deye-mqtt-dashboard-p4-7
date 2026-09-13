@@ -38,9 +38,6 @@
 #define HERO_FONT lv_font_montserrat_36
 /* Extra-large for Simple mode readability at a distance. */
 #define DISPLAY_FONT lv_font_montserrat_48
-#define GRID_ON_V_MIN 80.f
-#define GRID_ON_HZ_MIN 45.f
-#define GRID_ON_HZ_MAX 66.f
 
 #define BATT_PWR_MAX_W 3500.f
 #define BATT_PWR_SEGS 10
@@ -206,28 +203,24 @@ static const char *status_symbol(const telemetry_snapshot_t *snap)
     }
 }
 
-static void grid_mode_text(const telemetry_snapshot_t *snap, const char **text, uint32_t *color)
+static void grid_mode_text(const telemetry_snapshot_t *snap, const char **text, uint32_t *color, const char **icon)
 {
-    bool v_ok = telemetry_is_fresh(snap, METRIC_GRID_V);
-    bool hz_ok = telemetry_is_fresh(snap, METRIC_GRID_HZ);
-    bool on = false;
-    if (v_ok && snap->m[METRIC_GRID_V].value >= GRID_ON_V_MIN) {
-        on = true;
-    } else if (hz_ok) {
-        float hz = snap->m[METRIC_GRID_HZ].value;
-        on = (hz >= GRID_ON_HZ_MIN && hz <= GRID_ON_HZ_MAX);
-    }
-    if (!v_ok && !hz_ok) {
-        *text = "--";
-        *color = COL_MUTED;
-        return;
-    }
-    if (on) {
+    switch (telemetry_grid_link(snap)) {
+    case TELEMETRY_GRID_ON:
         *text = "On-Grid";
         *color = COL_POS;
-    } else {
+        *icon = LV_SYMBOL_CHARGE;
+        break;
+    case TELEMETRY_GRID_OFF:
         *text = "Off-Grid";
-        *color = COL_NEG;
+        *color = COL_DANGER;
+        *icon = LV_SYMBOL_CLOSE;
+        break;
+    default:
+        *text = "--";
+        *color = COL_MUTED;
+        *icon = LV_SYMBOL_CHARGE;
+        break;
     }
 }
 
@@ -1145,9 +1138,10 @@ static void ui_refresh_cb(lv_timer_t *timer)
     lv_obj_set_style_text_color(s_status, lv_color_hex(telemetry_status_color(&snap)), 0);
 
     const char *grid_txt = "--";
+    const char *grid_icon = LV_SYMBOL_CHARGE;
     uint32_t grid_col = COL_MUTED;
-    grid_mode_text(&snap, &grid_txt, &grid_col);
-    set_sb_item(s_grid_mode, LV_SYMBOL_CHARGE, grid_txt);
+    grid_mode_text(&snap, &grid_txt, &grid_col, &grid_icon);
+    set_sb_item(s_grid_mode, grid_icon, grid_txt);
     lv_obj_set_style_text_color(s_grid_mode, lv_color_hex(grid_col), 0);
 
     update_pv_label(s_simple_pv, &snap);

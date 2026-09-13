@@ -57,7 +57,7 @@ Full topic = `iriv/ivt/` + `topicSuffix`.
 | Name | Formula |
 |------|---------|
 | PV total power | `pv1/power` + `pv2/power` |
-| House load | `load/power` + max(`grid/power_ct`, 0). Used on Simple/Full/HA Load and Synk DAILY LOAD. |
+| House load | `load/power` + grid import, but **not** while that import is charging the battery. `battery/power` < 0 is DC into the pack. PV covers charge before the grid does. If `max(-battery/power, 0) - PV ≥ 40 W`, house load is the LOAD port only (Deye UPS-Load). |
 | Synk inverter hub | `load/power` and `load/current` (LOAD port). Never `inverter/power`. |
 | Home energy today (Synk daily kWh) | `pv/energy_today` + `grid/buy_today` + `battery/discharge_today` − `grid/sell_today` − `battery/charge_today` |
 

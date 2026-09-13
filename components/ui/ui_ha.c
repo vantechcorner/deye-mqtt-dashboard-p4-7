@@ -78,6 +78,10 @@ static ha_node_t s_node_batt;
 static lv_obj_t *s_hub_h;
 static lv_obj_t *s_hub_v;
 static ha_flow_edge_t s_edges[HA_FLOW_EDGES];
+static lv_obj_t *s_grid_off;
+
+static lv_obj_t *make_grid_off_badge(lv_obj_t *parent);
+static void place_ha_grid_off(void);
 
 static ha_power_card_t s_pwr_pv;
 static ha_power_card_t s_pwr_load;
@@ -291,10 +295,14 @@ static void layout_distribution(lv_obj_t *host)
         s_edges_inited = true;
     }
 
+    if (!s_grid_off) {
+        s_grid_off = make_grid_off_badge(host);
+    }
     edge_geometry(&s_edges[HA_EDGE_SOLAR], solar, hub, HA_EDGE_SOLAR);
     edge_geometry(&s_edges[HA_EDGE_GRID], grid, hub, HA_EDGE_GRID);
     edge_geometry(&s_edges[HA_EDGE_HOME], home, hub, HA_EDGE_HOME);
     edge_geometry(&s_edges[HA_EDGE_BATT], batt, hub, HA_EDGE_BATT);
+    place_ha_grid_off();
 
     lv_obj_move_foreground(s_node_solar.circle);
     lv_obj_move_foreground(s_node_grid.circle);
@@ -360,6 +368,35 @@ static float flow_speed(float watts)
     }
     /* Slower dots: ~half prior speed. */
     return 0.035f + n * 0.09f;
+}
+
+static lv_obj_t *make_grid_off_badge(lv_obj_t *parent)
+{
+    lv_obj_t *badge = lv_obj_create(parent);
+    lv_obj_set_size(badge, 28, 28);
+    lv_obj_set_style_radius(badge, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_color(badge, lv_color_hex(HA_DANGER), 0);
+    lv_obj_set_style_bg_opa(badge, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(badge, 2, 0);
+    lv_obj_set_style_border_color(badge, lv_color_hex(0xFFFFFF), 0);
+    lv_obj_set_style_pad_all(badge, 0, 0);
+    lv_obj_clear_flag(badge, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_flag(badge, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_t *x = ha_label(badge, &lv_font_montserrat_16, 0xFFFFFF);
+    lv_label_set_text(x, LV_SYMBOL_CLOSE);
+    lv_obj_center(x);
+    return badge;
+}
+
+static void place_ha_grid_off(void)
+{
+    if (!s_grid_off) {
+        return;
+    }
+    float x = ((float)s_edges[HA_EDGE_GRID].outer.x + (float)s_edges[HA_EDGE_GRID].hub.x) * 0.5f;
+    float y = ((float)s_edges[HA_EDGE_GRID].outer.y + (float)s_edges[HA_EDGE_GRID].hub.y) * 0.5f;
+    lv_obj_set_pos(s_grid_off, (int32_t)(x - 14.f), (int32_t)(y - 14.f));
+    lv_obj_move_foreground(s_grid_off);
 }
 
 static void update_flow_edge(ha_flow_edge_t *edge)
@@ -789,13 +826,16 @@ void ui_ha_update(const telemetry_snapshot_t *snap)
     s_edges[HA_EDGE_SOLAR].speed = flow_speed(pv_w);
     s_edges[HA_EDGE_SOLAR].color = HA_SOLAR;
 
-    if (grid_ok && absf(grid_w) >= HA_FLOW_THRESH_W) {
+    bool grid_off = telemetry_grid_link(snap) == TELEMETRY_GRID_OFF;
+    if (!grid_off && grid_ok && absf(grid_w) >= HA_FLOW_THRESH_W) {
         s_edges[HA_EDGE_GRID].active = true;
         s_edges[HA_EDGE_GRID].toward_hub = (grid_w > 0.f);
         s_edges[HA_EDGE_GRID].speed = flow_speed(grid_w);
+        s_edges[HA_EDGE_GRID].color = HA_GRID;
     } else {
         s_edges[HA_EDGE_GRID].active = false;
         s_edges[HA_EDGE_GRID].speed = 0.f;
+        s_edges[HA_EDGE_GRID].color = grid_off ? HA_DANGER : HA_GRID;
     }
 
     s_edges[HA_EDGE_HOME].active = load_ok && flow_load >= HA_FLOW_THRESH_W;
@@ -816,6 +856,18 @@ void ui_ha_update(const telemetry_snapshot_t *snap)
     for (int i = 0; i < HA_FLOW_EDGES; i++) {
         if (s_edges_inited) {
             update_flow_edge(&s_edges[i]);
+        }
+    }
+    if (grid_off && s_edges[HA_EDGE_GRID].line) {
+        lv_obj_set_style_line_color(s_edges[HA_EDGE_GRID].line, lv_color_hex(HA_DANGER), 0);
+        lv_obj_set_style_opa(s_edges[HA_EDGE_GRID].line, LV_OPA_70, 0);
+    }
+    if (s_grid_off) {
+        if (grid_off) {
+            lv_obj_clear_flag(s_grid_off, LV_OBJ_FLAG_HIDDEN);
+            place_ha_grid_off();
+        } else {
+            lv_obj_add_flag(s_grid_off, LV_OBJ_FLAG_HIDDEN);
         }
     }
 }

@@ -63,10 +63,16 @@ IRIV publishes two different watt topics. They are **not** Solarman “consumpti
 **House total load** (Simple / Full **Load**, HA **Load Power**, Synk **DAILY LOAD**):
 
 ```
-house_w = load/power + max(grid/power_ct, 0)
+house_w = load/power + grid_import_not_used_to_charge
 ```
 
-Add CT import only. When exporting (`grid/power_ct` < 0), house load is just the LOAD port.
+`battery/power` is signed: negative means DC into the pack (charging), same sign as battery current. PV is assumed to cover that charge first. If the grid is still supplying the charge (`charge - PV ≥ 40 W`), CT import is inverter intake (charge + conversion loss), not house consumption — Deye shows that as **Load 0 W** and **UPS-Load** = `load/power`. In that case house load is the LOAD port only.
+
+When the battery is not charging from the grid, house load is the LOAD port plus CT import (grid-side home load). Export (`grid/power_ct` < 0) is not added.
+
+**Synk battery box** shows signed watts (for example `-608 W` while charging), matching battery current. It does not show the absolute value.
+
+**Off-grid:** status bar text and icon are red. HA and Synk draw a red circle-X on the grid flow line.
 
 **Synk inverter hub** (box above the inverter icon): LOAD port only — `load/power` and `load/current`. Not house total, not `inverter/power`.
 

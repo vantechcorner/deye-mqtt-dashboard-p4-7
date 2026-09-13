@@ -122,6 +122,7 @@ static sk_flow_edge_t s_edges[SK_FLOW_EDGES];
 static lv_point_precise_t s_edge_poly[SK_FLOW_EDGES][SK_LINE_PTS];
 static bool s_edges_inited;
 static bool s_layout_done;
+static lv_obj_t *s_grid_off;
 
 static void strip(lv_obj_t *obj)
 {
@@ -270,6 +271,30 @@ static void init_edge(sk_flow_edge_t *edge, lv_obj_t *host, uint32_t color, int 
     edge->speed = 0.f;
     edge->active = false;
     edge->toward_hub = true;
+}
+
+static lv_obj_t *make_grid_off_badge(lv_obj_t *parent)
+{
+    lv_obj_t *badge = lv_obj_create(parent);
+    lv_obj_set_size(badge, 28, 28);
+    lv_obj_set_style_radius(badge, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_color(badge, lv_color_hex(SK_DANGER), 0);
+    lv_obj_set_style_bg_opa(badge, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(badge, 2, 0);
+    lv_obj_set_style_border_color(badge, lv_color_hex(0xFFFFFF), 0);
+    lv_obj_set_style_pad_all(badge, 0, 0);
+    lv_obj_clear_flag(badge, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_flag(badge, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_t *x = sk_label(badge, &lv_font_montserrat_16, 0xFFFFFF);
+    lv_label_set_text(x, LV_SYMBOL_CLOSE);
+    lv_obj_center(x);
+    return badge;
+}
+
+static void place_grid_off_badge(lv_obj_t *badge, float x, float y)
+{
+    lv_obj_set_pos(badge, (int32_t)(x - 14.f), (int32_t)(y - 14.f));
+    lv_obj_move_foreground(badge);
 }
 
 static void update_flow_edge(sk_flow_edge_t *edge)
@@ -558,6 +583,12 @@ static void layout_sunsynk(lv_obj_t *host)
                                    .y = (lv_value_precise_t)hub_bot_y};
     lv_point_precise_t grid_mid = {.x = grid_hub.x, .y = grid_outer.y};
     set_edge_points(&s_edges[SK_EDGE_GRID], SK_EDGE_GRID, grid_outer, grid_mid, grid_hub);
+    if (s_grid_off) {
+        /* Horizontal run of the grid L-path (where the disconnect mark sits). */
+        float mx = ((float)grid_outer.x + (float)grid_mid.x) * 0.5f;
+        float my = ((float)grid_outer.y + (float)grid_mid.y) * 0.5f;
+        place_grid_off_badge(s_grid_off, mx, my);
+    }
 
     /* Raise nodes above lines; keep dots above lines but under boxes via z-order after update */
     lv_obj_move_foreground(s_solar.box);
@@ -635,6 +666,7 @@ void ui_sunsynk_build(lv_obj_t *root)
     init_edge(&s_edges[SK_EDGE_BATT], s_host, SK_BATT, SK_EDGE_BATT);
     init_edge(&s_edges[SK_EDGE_HOME], s_host, SK_LOAD, SK_EDGE_HOME);
     init_edge(&s_edges[SK_EDGE_GRID], s_host, SK_GRID, SK_EDGE_GRID);
+    s_grid_off = make_grid_off_badge(s_host);
     s_edges_inited = true;
 
     s_solar = make_corner(s_host, SK_SOLAR, LV_SYMBOL_CHARGE, "DAILY SOLAR", SK_SOLAR_BOX_W, SK_SOLAR_BOX_H,
@@ -794,7 +826,8 @@ void ui_sunsynk_update(const telemetry_snapshot_t *snap)
             snprintf(ibuf, sizeof(ibuf), "%+.1f A", snap->m[METRIC_BATT_I].value);
         }
         if (bp) {
-            snprintf(wbuf, sizeof(wbuf), "%.0f W", absf(batt_w));
+            /* Negative = DC into the pack (charging), same sign as battery current. */
+            snprintf(wbuf, sizeof(wbuf), "%.0f W", batt_w);
         }
         snprintf(buf, sizeof(buf), "%s\n%s\n%s", vbuf, ibuf, wbuf);
         lv_label_set_text(s_batt.live, buf);
@@ -949,7 +982,8 @@ void ui_sunsynk_update(const telemetry_snapshot_t *snap)
     s_edges[SK_EDGE_HOME].speed = flow_speed(flow_home);
     s_edges[SK_EDGE_HOME].color = SK_LOAD;
 
-    if (grid_ok && absf(grid_w) >= SK_FLOW_THRESH_W) {
+    bool grid_off = telemetry_grid_link(snap) == TELEMETRY_GRID_OFF;
+    if (!grid_off && grid_ok && absf(grid_w) >= SK_FLOW_THRESH_W) {
         s_edges[SK_EDGE_GRID].active = true;
         s_edges[SK_EDGE_GRID].toward_hub = (grid_w > 0.f); /* import toward hub */
         s_edges[SK_EDGE_GRID].speed = flow_speed(grid_w);
@@ -957,6 +991,7 @@ void ui_sunsynk_update(const telemetry_snapshot_t *snap)
     } else {
         s_edges[SK_EDGE_GRID].active = false;
         s_edges[SK_EDGE_GRID].speed = 0.f;
+        s_edges[SK_EDGE_GRID].color = grid_off ? SK_DANGER : SK_GRID;
     }
 
     if (bp && absf(batt_w) >= SK_FLOW_THRESH_W) {
@@ -972,6 +1007,20 @@ void ui_sunsynk_update(const telemetry_snapshot_t *snap)
     for (int i = 0; i < SK_FLOW_EDGES; i++) {
         if (s_edges_inited) {
             update_flow_edge(&s_edges[i]);
+        }
+    }
+    if (grid_off && s_edges[SK_EDGE_GRID].line) {
+        lv_obj_set_style_line_color(s_edges[SK_EDGE_GRID].line, lv_color_hex(SK_DANGER), 0);
+        lv_obj_set_style_opa(s_edges[SK_EDGE_GRID].line, LV_OPA_70, 0);
+    }
+    if (s_grid_off) {
+        if (grid_off) {
+            lv_obj_clear_flag(s_grid_off, LV_OBJ_FLAG_HIDDEN);
+            place_grid_off_badge(s_grid_off,
+                                 ((float)s_edges[SK_EDGE_GRID].outer.x + (float)s_edges[SK_EDGE_GRID].mid.x) * 0.5f,
+                                 ((float)s_edges[SK_EDGE_GRID].outer.y + (float)s_edges[SK_EDGE_GRID].mid.y) * 0.5f);
+        } else {
+            lv_obj_add_flag(s_grid_off, LV_OBJ_FLAG_HIDDEN);
         }
     }
     snug_corner_icons();

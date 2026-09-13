@@ -209,29 +209,71 @@ float telemetry_load_current(const telemetry_snapshot_t *snap, bool *fresh)
     return 0.f;
 }
 
+telemetry_grid_link_t telemetry_grid_link(const telemetry_snapshot_t *snap)
+{
+    bool v_ok = telemetry_is_fresh(snap, METRIC_GRID_V);
+    bool hz_ok = telemetry_is_fresh(snap, METRIC_GRID_HZ);
+    if (!v_ok && !hz_ok) {
+        return TELEMETRY_GRID_UNKNOWN;
+    }
+    if (v_ok && snap->m[METRIC_GRID_V].value >= 80.f) {
+        return TELEMETRY_GRID_ON;
+    }
+    if (hz_ok) {
+        float hz = snap->m[METRIC_GRID_HZ].value;
+        if (hz >= 45.f && hz <= 66.f) {
+            return TELEMETRY_GRID_ON;
+        }
+    }
+    return TELEMETRY_GRID_OFF;
+}
+
 float telemetry_house_power_w(const telemetry_snapshot_t *snap, bool *fresh)
 {
-    /* IRIV load/power is Modbus 178 (backup/essential only). Inverter/power is
-     * Modbus 175 signed AC converter power and goes negative while charging from
-     * AC — that is not Solarman "consumption".
-     * House load ≈ essential + grid import (CT), matching Solarman Home. */
+    /* load/power is the LOAD/UPS port only. grid/power_ct > 0 is import at the
+     * CT, which also includes AC drawn to charge the battery.
+     * battery/power < 0 means DC power into the pack (charging).
+     * PV is assumed to cover that charge before the grid does, so off-grid
+     * solar charging does not shrink the LOAD-port figure.
+     * While the grid is the charge source, the CT reading is inverter intake
+     * (charge + conversion loss), not house consumption — Deye shows that as
+     * Load 0 W and UPS-Load = load/power. */
     bool load_ok = telemetry_is_fresh(snap, METRIC_LOAD_P);
     bool grid_ok = telemetry_is_fresh(snap, METRIC_GRID_P_CT);
     *fresh = load_ok || grid_ok;
     if (!*fresh) {
         return 0.f;
     }
-    float house = load_ok ? snap->m[METRIC_LOAD_P].value : 0.f;
-    if (grid_ok) {
-        float grid = snap->m[METRIC_GRID_P_CT].value;
-        if (grid > 0.f) {
-            house += grid;
-        }
+
+    float essential = load_ok ? snap->m[METRIC_LOAD_P].value : 0.f;
+    if (essential < 0.f) {
+        essential = 0.f;
     }
-    if (house < 0.f) {
-        house = 0.f;
+
+    float grid_import = 0.f;
+    if (grid_ok && snap->m[METRIC_GRID_P_CT].value > 0.f) {
+        grid_import = snap->m[METRIC_GRID_P_CT].value;
     }
-    return house;
+
+    float charge = 0.f;
+    if (telemetry_is_fresh(snap, METRIC_BATT_P) && snap->m[METRIC_BATT_P].value < 0.f) {
+        charge = -snap->m[METRIC_BATT_P].value;
+    }
+    bool pv_ok = false;
+    float pv = telemetry_pv_total_w(snap, &pv_ok);
+    if (!pv_ok || pv < 0.f) {
+        pv = 0.f;
+    }
+    float charge_from_grid = charge - pv;
+    if (charge_from_grid < 0.f) {
+        charge_from_grid = 0.f;
+    }
+
+    float grid_for_house = grid_import;
+    if (charge_from_grid >= 40.f) {
+        grid_for_house = 0.f;
+    }
+    return essential + grid_for_house;
 }
 
 float telemetry_home_energy_today(const telemetry_snapshot_t *snap, bool *fresh)
